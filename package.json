@@ -1,0 +1,23 @@
+{
+  "name": "bytehub",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm --workspace=@bytehub/web run dev",
+    "dev:api": "npm --workspace=@bytehub/api run dev",
+    "build:shared": "npm --workspace=@bytehub/shared run build",
+    "build:api": "npm --workspace=@bytehub/api run build",
+    "build:web": "npm --workspace=@bytehub/web run build",
+    "build": "npm run build:shared && npm run build:api && npm run build:web",
+    "test": "npm --workspace=@bytehub/api run test && npm --workspace=@bytehub/shared run test",
+    "lint": "npm --workspace=@bytehub/web run lint && npm --workspace=@bytehub/api run lint",
+    "typecheck": "npm --workspace=@bytehub/shared run typecheck && npm --workspace=@bytehub/api run typecheck && npm --workspace=@bytehub/web run typecheck"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}
