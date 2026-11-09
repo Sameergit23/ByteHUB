@@ -1,79 +1,46 @@
-"use client";
-
-import React, { useState } from "react";
+import type { Metadata } from "next";
 import Link from "next/link";
-import { Tabs } from "../../components/ui/Tabs";
-import { Input } from "../../components/ui/Input";
-import { Select } from "../../components/ui/Select";
 import { Chip } from "../../components/ui/Chip";
 import { Button } from "../../components/ui/Button";
+import { ColophonFooter } from "../../components/layout/ColophonFooter";
+import { MOCK_INTERNSHIPS } from "../../lib/mockData";
 
-interface InternshipRow {
-  id: string;
-  role: string;
-  track: string;
-  mode: string;
-  duration: string;
-  stipend: string;
-}
+export const metadata: Metadata = {
+  title: "Open Internships — ByteHUB",
+  description:
+    "Apply to live projects with mentors. Complete training first to improve your chances.",
+  openGraph: {
+    title: "Open Internships — ByteHUB",
+    description:
+      "Apply to live projects with mentors. Complete training first to improve your chances.",
+    url: "https://bytehub.io/internships",
+  },
+};
 
-export default function InternshipsPage() {
-  const [activeTab, setActiveTab] = useState("internships");
-  const [search, setSearch] = useState("");
-  const [selectedTrack, setSelectedTrack] = useState("ALL");
-  const [selectedMode, setSelectedMode] = useState("ANY");
-  const [selectedDuration, setSelectedDuration] = useState("ANY");
+export default function InternshipsPage({
+  searchParams,
+}: {
+  searchParams?: {
+    search?: string;
+    track?: string;
+    mode?: string;
+    duration?: string;
+    page?: string;
+  };
+}) {
+  const search = searchParams?.search?.toLowerCase() || "";
+  const track = searchParams?.track || "ALL";
+  const mode = searchParams?.mode || "ANY";
+  const duration = searchParams?.duration || "ANY";
 
-  const internships: InternshipRow[] = [
-    {
-      id: "intern-01",
-      role: "Frontend Developer Intern",
-      track: "Web Development",
-      mode: "[REMOTE / ON-SITE]",
-      duration: "[WEEKS]",
-      stipend: "[STIPEND]",
-    },
-    {
-      id: "intern-02",
-      role: "Mobile App Intern",
-      track: "App Development",
-      mode: "[REMOTE / ON-SITE]",
-      duration: "[WEEKS]",
-      stipend: "[STIPEND]",
-    },
-    {
-      id: "intern-03",
-      role: "Data Analyst Intern",
-      track: "Data & AI",
-      mode: "[REMOTE / ON-SITE]",
-      duration: "[WEEKS]",
-      stipend: "[STIPEND]",
-    },
-    {
-      id: "intern-04",
-      role: "UI/UX Design Intern",
-      track: "UI/UX Design",
-      mode: "[REMOTE / ON-SITE]",
-      duration: "[WEEKS]",
-      stipend: "[STIPEND]",
-    },
-    {
-      id: "intern-05",
-      role: "Backend Developer Intern",
-      track: "Web Development",
-      mode: "[REMOTE / ON-SITE]",
-      duration: "[WEEKS]",
-      stipend: "[STIPEND]",
-    },
-  ];
-
-  const filtered = internships.filter((item) => {
+  // Filter driven by URL query params (Server-side rendered, crawlable & shareable)
+  const filtered = MOCK_INTERNSHIPS.filter((item) => {
     const matchesSearch =
       search === "" ||
-      item.role.toLowerCase().includes(search.toLowerCase()) ||
-      item.track.toLowerCase().includes(search.toLowerCase());
+      item.title.toLowerCase().includes(search) ||
+      item.track.toLowerCase().includes(search);
 
-    const matchesTrack = selectedTrack === "ALL" || item.track === selectedTrack;
+    const matchesTrack = track === "ALL" || item.track === track;
 
     return matchesSearch && matchesTrack;
   });
@@ -81,7 +48,7 @@ export default function InternshipsPage() {
   return (
     <div className="w-full bg-canvas min-h-screen py-12 sm:py-16">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
-        {/* Page Title & Subtitle Matching Image 2 */}
+        {/* Page Title & Subtitle Matching Image 3 */}
         <div className="space-y-3">
           <h1 className="font-heading text-4xl sm:text-5xl font-bold tracking-tight text-ink">
             Open internships
@@ -91,94 +58,134 @@ export default function InternshipsPage() {
           </p>
         </div>
 
-        {/* Tabs Matching Image 2 */}
-        <div>
-          <Tabs
-            tabs={[
-              { id: "internships", label: "Internships" },
-              { id: "training", label: "Training" },
-            ]}
-            activeId={activeTab}
-            onChange={(id) => {
-              if (id === "training") {
-                window.location.href = "/training";
-              } else {
-                setActiveTab(id);
-              }
-            }}
-          />
+        {/* Tabs Matching Image 3 */}
+        <div className="border-b border-editorial-border flex items-center gap-8 text-sm font-sans font-semibold">
+          <Link
+            href="/internships"
+            className="py-3 text-ink border-b-2 border-accent font-bold min-h-[44px] inline-flex items-center"
+          >
+            Internships
+          </Link>
+          <Link
+            href="/training"
+            className="py-3 text-editorial-muted hover:text-ink border-b-2 border-transparent transition-colors min-h-[44px] inline-flex items-center"
+          >
+            Training
+          </Link>
         </div>
 
-        {/* Filter Controls Row Matching Image 2 */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 items-end">
-          <div className="lg:col-span-6">
-            <Input
-              label="Search"
+        {/* Server-side Filter Form (Form GET method updates URL query params) */}
+        <form
+          method="GET"
+          action="/internships"
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 items-end"
+        >
+          <div className="lg:col-span-6 space-y-1.5">
+            <label
+              htmlFor="search-filter"
+              className="block text-xs font-sans font-medium text-ink"
+            >
+              Search
+            </label>
+            <input
+              id="search-filter"
+              name="search"
+              type="text"
+              defaultValue={searchParams?.search || ""}
               placeholder="Role or skill"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              className="w-full min-h-[44px] px-3.5 py-2.5 text-sm bg-white text-ink border border-editorial-border hover:border-ink focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-1"
             />
           </div>
 
-          <div className="lg:col-span-2">
-            <Select
-              label="Track"
-              value={selectedTrack}
-              onChange={(e) => setSelectedTrack(e.target.value)}
-              options={[
-                { label: "All tracks", value: "ALL" },
-                { label: "Web Development", value: "Web Development" },
-                { label: "App Development", value: "App Development" },
-                { label: "Data & AI", value: "Data & AI" },
-                { label: "UI/UX Design", value: "UI/UX Design" },
-              ]}
-            />
+          <div className="lg:col-span-2 space-y-1.5">
+            <label
+              htmlFor="track-filter"
+              className="block text-xs font-sans font-medium text-ink"
+            >
+              Track
+            </label>
+            <select
+              id="track-filter"
+              name="track"
+              defaultValue={track}
+              className="w-full min-h-[44px] px-3 py-2.5 text-sm bg-white text-ink border border-editorial-border hover:border-ink cursor-pointer focus-visible:outline-2 focus-visible:outline-ink"
+            >
+              <option value="ALL">All tracks</option>
+              <option value="Web Development">Web Development</option>
+              <option value="App Development">App Development</option>
+              <option value="Data & AI">Data & AI</option>
+              <option value="UI/UX Design">UI/UX Design</option>
+            </select>
           </div>
 
-          <div className="lg:col-span-2">
-            <Select
-              label="Mode"
-              value={selectedMode}
-              onChange={(e) => setSelectedMode(e.target.value)}
-              options={[
-                { label: "Any", value: "ANY" },
-                { label: "Remote", value: "REMOTE" },
-                { label: "On-site", value: "ON_SITE" },
-              ]}
-            />
+          <div className="lg:col-span-2 space-y-1.5">
+            <label
+              htmlFor="mode-filter"
+              className="block text-xs font-sans font-medium text-ink"
+            >
+              Mode
+            </label>
+            <select
+              id="mode-filter"
+              name="mode"
+              defaultValue={mode}
+              className="w-full min-h-[44px] px-3 py-2.5 text-sm bg-white text-ink border border-editorial-border hover:border-ink cursor-pointer focus-visible:outline-2 focus-visible:outline-ink"
+            >
+              <option value="ANY">Any</option>
+              <option value="REMOTE">Remote</option>
+              <option value="ON_SITE">On-site</option>
+            </select>
           </div>
 
-          <div className="lg:col-span-2">
-            <Select
-              label="Duration"
-              value={selectedDuration}
-              onChange={(e) => setSelectedDuration(e.target.value)}
-              options={[
-                { label: "Any", value: "ANY" },
-                { label: "4-8 Weeks", value: "SHORT" },
-                { label: "12-24 Weeks", value: "LONG" },
-              ]}
-            />
+          <div className="lg:col-span-2 space-y-1.5">
+            <label
+              htmlFor="duration-filter"
+              className="block text-xs font-sans font-medium text-ink"
+            >
+              Duration
+            </label>
+            <div className="flex gap-2">
+              <select
+                id="duration-filter"
+                name="duration"
+                defaultValue={duration}
+                className="w-full min-h-[44px] px-3 py-2.5 text-sm bg-white text-ink border border-editorial-border hover:border-ink cursor-pointer focus-visible:outline-2 focus-visible:outline-ink"
+              >
+                <option value="ANY">Any</option>
+                <option value="SHORT">4-8 Weeks</option>
+                <option value="LONG">12-24 Weeks</option>
+              </select>
+              <button
+                type="submit"
+                aria-label="Filter"
+                className="min-h-[44px] px-4 bg-ink text-canvas text-xs font-mono font-bold hover:bg-accent transition-colors"
+              >
+                Apply
+              </button>
+            </div>
           </div>
-        </div>
+        </form>
 
-        {/* Open Roles Count */}
-        <div className="font-mono text-xs text-editorial-muted pt-2">
+        {/* Count Label Matching Image 3 */}
+        <div className="font-mono text-xs text-editorial-muted pt-1">
           {filtered.length} open roles
         </div>
 
-        {/* List of Internships Matching Image 2 */}
+        {/* Tabular Rows Matching Image 3 */}
         <div className="border-t border-editorial-border divide-y divide-editorial-border">
           {filtered.map((item) => (
             <div
               key={item.id}
               className="py-5 sm:py-6 grid grid-cols-1 md:grid-cols-12 gap-4 items-center hover:bg-white/40 transition-colors"
             >
-              {/* Role title and Track chip */}
+              {/* Role Title and Track Chip */}
               <div className="md:col-span-6 space-y-2">
                 <h2 className="font-heading text-lg sm:text-xl font-bold text-ink">
-                  <Link href={`/internships/${item.id}`} className="hover:text-accent">
-                    {item.role}
+                  <Link
+                    href={`/internships/${item.slug}`}
+                    className="hover:text-accent"
+                  >
+                    {item.title}
                   </Link>
                 </h2>
                 <div>
@@ -186,9 +193,9 @@ export default function InternshipsPage() {
                 </div>
               </div>
 
-              {/* Metadata columns */}
+              {/* Metadata matching Image 3 */}
               <div className="md:col-span-2 font-mono text-xs text-editorial-muted">
-                {item.mode}
+                {item.type}
               </div>
 
               <div className="md:col-span-1 font-mono text-xs text-editorial-muted">
@@ -201,7 +208,7 @@ export default function InternshipsPage() {
 
               {/* Apply Button */}
               <div className="md:col-span-2 flex justify-start md:justify-end">
-                <Link href={`/apply/${item.id}`}>
+                <Link href={`/internships/${item.slug}`}>
                   <Button variant="primary" size="sm" className="w-24">
                     Apply
                   </Button>
@@ -211,6 +218,9 @@ export default function InternshipsPage() {
           ))}
         </div>
       </div>
+
+      {/* Colophon Footer Matching Image 3 / 2 */}
+      <ColophonFooter className="mt-20" />
     </div>
   );
 }

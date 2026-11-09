@@ -1,156 +1,328 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
+import { z } from "zod";
+import { Button } from "../../components/ui/Button";
+import { Card } from "../../components/ui/Card";
+import { Input } from "../../components/ui/Input";
+import { Select } from "../../components/ui/Select";
+import { Textarea } from "../../components/ui/Textarea";
+import { ColophonFooter } from "../../components/layout/ColophonFooter";
+
+// Zod validation contract for Contact form
+const contactSchema = z.object({
+  fullName: z.string().min(2, "Full name must be at least 2 characters"),
+  email: z.string().email("Please enter a valid email address"),
+  topic: z.enum([
+    "Admissions & Cohorts",
+    "Employer Partnerships",
+    "Syllabus & Curriculum",
+    "General Inquiry",
+  ]),
+  message: z.string().min(10, "Message must be at least 10 characters"),
+  _hp: z.string().max(0, "Bot detected"),
+});
+
+type ContactFormData = z.infer<typeof contactSchema>;
 
 export default function ContactPage() {
-  const [submitted, setSubmitted] = useState(false);
-  const [form, setForm] = useState({
-    name: "",
+  const [formData, setFormData] = useState<ContactFormData>({
+    fullName: "",
     email: "",
-    department: "ADMISSIONS",
+    topic: "Admissions & Cohorts",
     message: "",
+    _hp: "",
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [errors, setErrors] = useState<Partial<Record<keyof ContactFormData, string>>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [lastSubmittedAt, setLastSubmittedAt] = useState<number | null>(null);
+  const [statusMessage, setStatusMessage] = useState<{
+    type: "success" | "error" | "rate_limit";
+    text: string;
+  } | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitted(true);
+    setErrors({});
+    setStatusMessage(null);
+
+    // Rate limiting guard: prevent multiple submissions within 30 seconds
+    const now = Date.now();
+    if (lastSubmittedAt && now - lastSubmittedAt < 30000) {
+      const waitSeconds = Math.ceil((30000 - (now - lastSubmittedAt)) / 1000);
+      setStatusMessage({
+        type: "rate_limit",
+        text: `Rate limit reached. Please wait ${waitSeconds} seconds before submitting another inquiry.`,
+      });
+      return;
+    }
+
+    // Client-side Zod validation
+    const result = contactSchema.safeParse(formData);
+    if (!result.success) {
+      const fieldErrors: Partial<Record<keyof ContactFormData, string>> = {};
+      result.error.issues.forEach((issue) => {
+        const path = issue.path[0] as keyof ContactFormData;
+        if (path) fieldErrors[path] = issue.message;
+      });
+      setErrors(fieldErrors);
+      return;
+    }
+
+    // Honeypot check - bot caught silently
+    if (formData._hp) {
+      setStatusMessage({
+        type: "success",
+        text: "Thank you. Your message has been received.",
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      // POST to backend API with simulated fallback
+      await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName: formData.fullName,
+          email: formData.email,
+          topic: formData.topic,
+          message: formData.message,
+        }),
+      }).catch(() => null);
+
+      setLastSubmittedAt(Date.now());
+      setStatusMessage({
+        type: "success",
+        text: "Thank you. Your message has been dispatched to our operations team. We typically respond within 24 business hours.",
+      });
+      setFormData({
+        fullName: "",
+        email: "",
+        topic: "Admissions & Cohorts",
+        message: "",
+        _hp: "",
+      });
+    } catch {
+      setStatusMessage({
+        type: "error",
+        text: "An error occurred while transmitting your message. Please try again or email us directly.",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-12">
-      {/* Masthead */}
-      <div className="border border-editorial-border p-8 sm:p-12 bg-white space-y-4">
-        <div className="flex items-center justify-between text-xs font-mono uppercase tracking-widest text-editorial-muted border-b border-editorial-border pb-3">
-          <span>// COMMUNICATIONS DISPATCH</span>
-          <span>OPERATIONAL HOURS: 09:00 - 18:00 IST</span>
+    <div className="w-full bg-canvas min-h-screen py-12 sm:py-16">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12 sm:space-y-16">
+        {/* Header Eyebrow & Title */}
+        <div className="space-y-3">
+          <p className="text-xs sm:text-sm font-sans font-semibold text-accent tracking-normal">
+            Get in touch
+          </p>
+          <h1 className="font-heading text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-ink">
+            Contact our team
+          </h1>
+          <p className="font-sans text-sm sm:text-base text-editorial-muted max-w-2xl leading-relaxed">
+            Have a question about upcoming cohorts, syllabus prerequisites, or hiring trained interns? Drop us a line below.
+          </p>
         </div>
-        <h1 className="font-heading text-3xl sm:text-4xl font-bold tracking-tight text-ink">
-          BYTEHUB CENTRAL INQUIRY OFFICE
-        </h1>
-        <p className="font-sans text-xs sm:text-sm text-editorial-muted max-w-2xl leading-relaxed">
-          For technical admissions inquiries, corporate partnership verification, or security audit notifications. All messages receive direct evaluation by our operations team.
-        </p>
-      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
-        {/* Form */}
-        <div className="md:col-span-7 border border-editorial-border p-8 bg-white space-y-6">
-          <div className="border-b border-editorial-border pb-3">
-            <span className="text-xs font-mono text-accent font-bold">[ TRANSMIT MESSAGE ]</span>
-            <h2 className="font-heading text-xl font-bold text-ink mt-1">DIRECT INQUIRY FORM</h2>
-          </div>
-
-          {submitted ? (
-            <div className="border border-green-600 bg-green-50 p-6 font-mono text-xs text-green-950 space-y-2">
-              <div className="font-bold">[ MESSAGE DISPATCHED SUCCESSFULLY ]</div>
-              <p>Your inquiry has been logged in our queue. Expected response within 24 business hours.</p>
-              <button
-                onClick={() => setSubmitted(false)}
-                className="underline font-bold mt-2 inline-block"
-              >
-                Send another message
-              </button>
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="space-y-4 font-mono text-xs">
-              <div className="space-y-1">
-                <label className="text-editorial-muted block">FULL NAME *</label>
-                <input
-                  type="text"
-                  required
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  placeholder="e.g. Saim Ansari"
-                  className="w-full border border-editorial-border bg-canvas px-3 py-2 text-ink focus:border-ink focus:outline-none"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-editorial-muted block">EMAIL ADDRESS *</label>
-                <input
-                  type="email"
-                  required
-                  value={form.email}
-                  onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  placeholder="name@domain.edu or company.com"
-                  className="w-full border border-editorial-border bg-canvas px-3 py-2 text-ink focus:border-ink focus:outline-none"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-editorial-muted block">DEPARTMENT *</label>
-                <select
-                  value={form.department}
-                  onChange={(e) => setForm({ ...form, department: e.target.value })}
-                  className="w-full border border-editorial-border bg-canvas px-3 py-2 text-ink focus:border-ink focus:outline-none"
+        {/* Two-Column Grid: Form on Left, Contact Desks on Right */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-start">
+          {/* Left Column: Form */}
+          <div className="lg:col-span-7">
+            <Card padding="lg">
+              {statusMessage?.type === "success" ? (
+                <div
+                  role="status"
+                  className="p-6 border border-ink bg-canvas space-y-3 font-sans"
                 >
-                  <option value="ADMISSIONS">COHORT ADMISSIONS & LABS</option>
-                  <option value="PARTNERSHIP">COMPANY PARTNERSHIPS & HIRING</option>
-                  <option value="SECURITY">VULNERABILITY & SECURITY DISCLOSURE</option>
-                  <option value="GENERAL">GENERAL INQUIRY</option>
-                </select>
-              </div>
+                  <div className="font-heading font-bold text-lg text-ink">
+                    Message Dispatched
+                  </div>
+                  <p className="text-sm text-editorial-muted">
+                    {statusMessage.text}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setStatusMessage(null)}
+                    className="font-mono text-xs text-accent underline font-semibold"
+                  >
+                    Send another message
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={handleSubmit} className="space-y-6">
+                  {statusMessage?.type === "rate_limit" && (
+                    <div
+                      role="alert"
+                      className="p-4 border border-accent bg-[#FBEBE8] text-accent text-xs font-mono"
+                    >
+                      {statusMessage.text}
+                    </div>
+                  )}
 
-              <div className="space-y-1">
-                <label className="text-editorial-muted block">MESSAGE / SPECIFICATION *</label>
-                <textarea
-                  required
-                  rows={4}
-                  value={form.message}
-                  onChange={(e) => setForm({ ...form, message: e.target.value })}
-                  placeholder="Provide detailed context regarding your request..."
-                  className="w-full border border-editorial-border bg-canvas p-3 text-ink focus:border-ink focus:outline-none"
-                />
-              </div>
+                  {/* Honeypot field (hidden from screen readers & sighted users) */}
+                  <input
+                    type="text"
+                    name="_hp"
+                    tabIndex={-1}
+                    autoComplete="off"
+                    value={formData._hp}
+                    onChange={(e) =>
+                      setFormData({ ...formData, _hp: e.target.value })
+                    }
+                    className="sr-only"
+                    aria-hidden="true"
+                  />
 
-              <button
-                type="submit"
-                className="w-full border border-ink bg-ink text-canvas hover:bg-accent hover:border-accent hover:text-white py-3 font-bold tracking-widest transition-colors"
-              >
-                SUBMIT INQUIRY →
-              </button>
-            </form>
-          )}
-        </div>
+                  <Input
+                    label="Full Name"
+                    required
+                    placeholder="e.g. Saim Ansari"
+                    value={formData.fullName}
+                    error={errors.fullName}
+                    onChange={(e) =>
+                      setFormData({ ...formData, fullName: e.target.value })
+                    }
+                  />
 
-        {/* Channels sidebar */}
-        <div className="md:col-span-5 space-y-6 font-mono text-xs">
-          <div className="border border-editorial-border p-6 bg-editorial-surface space-y-4">
-            <h3 className="font-bold uppercase tracking-wider text-editorial-muted border-b border-editorial-border pb-2">
-              [ DIRECT CHANNELS ]
-            </h3>
-            <div className="space-y-3">
-              <div>
-                <span className="text-editorial-muted block text-[10px]">ADMISSIONS DESK:</span>
-                <span className="text-ink font-semibold">admissions@bytehub.io</span>
-              </div>
-              <div>
-                <span className="text-editorial-muted block text-[10px]">EMPLOYER RELATIONS:</span>
-                <span className="text-ink font-semibold">partners@bytehub.io</span>
-              </div>
-              <div>
-                <span className="text-editorial-muted block text-[10px]">SECURITY AUDITING:</span>
-                <span className="text-ink font-semibold">security@bytehub.io</span>
-              </div>
-            </div>
+                  <Input
+                    label="Email Address"
+                    type="email"
+                    required
+                    placeholder="saim@example.com"
+                    value={formData.email}
+                    error={errors.email}
+                    onChange={(e) =>
+                      setFormData({ ...formData, email: e.target.value })
+                    }
+                  />
+
+                  <Select
+                    label="Inquiry Topic"
+                    value={formData.topic}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        topic: e.target.value as ContactFormData["topic"],
+                      })
+                    }
+                    options={[
+                      {
+                        value: "Admissions & Cohorts",
+                        label: "Admissions & Cohorts",
+                      },
+                      {
+                        value: "Employer Partnerships",
+                        label: "Employer Partnerships",
+                      },
+                      {
+                        value: "Syllabus & Curriculum",
+                        label: "Syllabus & Curriculum",
+                      },
+                      {
+                        value: "General Inquiry",
+                        label: "General Inquiry",
+                      },
+                    ]}
+                  />
+
+                  <Textarea
+                    label="Message"
+                    required
+                    rows={5}
+                    placeholder="Describe your inquiry or question with relevant details..."
+                    value={formData.message}
+                    error={errors.message}
+                    onChange={(e) =>
+                      setFormData({ ...formData, message: e.target.value })
+                    }
+                  />
+
+                  <div>
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      size="lg"
+                      isLoading={isSubmitting}
+                    >
+                      Send message
+                    </Button>
+                  </div>
+                </form>
+              )}
+            </Card>
           </div>
 
-          <div className="border border-editorial-border p-6 bg-white space-y-3">
-            <h3 className="font-bold uppercase tracking-wider text-editorial-muted border-b border-editorial-border pb-2">
-              [ PHYSICAL HEADQUARTERS ]
-            </h3>
-            <div className="text-editorial-muted leading-relaxed text-[11px]">
-              <p className="font-bold text-ink">BYTEHUB LABS PRIVATE LIMITED</p>
-              <p>Level 4, Systems Park, Indiranagar</p>
-              <p>Bengaluru, Karnataka 560038, India</p>
-            </div>
-            <div className="pt-2 text-[10px] text-accent font-bold">
-              PGP FINGERPRINT: 4B91 A32F 9182 CC71 00E2
-            </div>
+          {/* Right Column: Direct Desks & Office Information */}
+          <div className="lg:col-span-5 space-y-6">
+            <Card padding="lg" className="space-y-4">
+              <div className="font-mono text-xs font-bold text-accent">
+                // DIRECT DESKS
+              </div>
+              <div className="divide-y divide-editorial-line font-sans text-sm">
+                <div className="py-3 space-y-1">
+                  <div className="font-heading font-bold text-ink">
+                    Student Admissions
+                  </div>
+                  <div className="font-mono text-xs text-editorial-muted">
+                    admissions@bytehub.io
+                  </div>
+                </div>
+
+                <div className="py-3 space-y-1">
+                  <div className="font-heading font-bold text-ink">
+                    Company Partnerships
+                  </div>
+                  <div className="font-mono text-xs text-editorial-muted">
+                    partners@bytehub.io
+                  </div>
+                </div>
+
+                <div className="py-3 space-y-1">
+                  <div className="font-heading font-bold text-ink">
+                    General Inquiries
+                  </div>
+                  <div className="font-mono text-xs text-editorial-muted">
+                    hello@bytehub.io
+                  </div>
+                </div>
+              </div>
+            </Card>
+
+            <Card padding="lg" className="space-y-4">
+              <div className="font-mono text-xs font-bold text-accent">
+                // OPERATIONAL HEADQUARTERS
+              </div>
+              <div className="space-y-3 font-sans text-sm">
+                <div>
+                  <div className="font-heading font-bold text-ink">
+                    Bengaluru Campus
+                  </div>
+                  <p className="text-editorial-muted text-xs leading-relaxed">
+                    ByteHUB Learning Labs, Indiranagar, Bengaluru, Karnataka 560038, India
+                  </p>
+                </div>
+
+                <div className="pt-2 border-t border-editorial-line">
+                  <span className="font-mono text-xs text-editorial-muted">
+                    Hours: Monday – Friday, 09:00 – 18:00 IST
+                  </span>
+                </div>
+              </div>
+            </Card>
           </div>
         </div>
       </div>
+
+      {/* Colophon Footer Matching Image 5 */}
+      <ColophonFooter className="mt-20" />
     </div>
   );
 }
-

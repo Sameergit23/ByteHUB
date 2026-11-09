@@ -1,121 +1,135 @@
 export interface InternshipItem {
   id: string;
+  slug: string;
   title: string;
   companyName: string;
   location: string;
-  type: "REMOTE" | "HYBRID" | "ON_SITE";
-  stipend: number;
-  currency: string;
-  durationMonths: number;
-  openings: number;
+  type: string;
+  track: string;
+  stipend: string;
+  duration: string;
   deadline: string;
-  skills: string[];
-  description: string;
+  aboutRole: string;
+  whatYouWillDo: string[];
   requirements: string[];
-  perks: string[];
+  skills: string[];
 }
 
 export const MOCK_INTERNSHIPS: InternshipItem[] = [
   {
     id: "intern-01",
-    title: "Distributed Systems & Storage Intern",
-    companyName: "HyperGrid Labs",
-    location: "Bengaluru (Hybrid)",
-    type: "HYBRID",
-    stipend: 45000,
-    currency: "INR",
-    durationMonths: 6,
-    openings: 2,
-    deadline: "2026-12-15T23:59:59.000Z",
-    skills: ["Rust", "PostgreSQL", "Raft", "Distributed Systems"],
-    description:
-      "Join our core storage engine team building multi-region partitioned key-value databases with strict ACID transaction guarantees. You will profile memory allocations, debug write-ahead log performance, and write comprehensive chaos testing harnesses.",
+    slug: "frontend-developer-intern",
+    title: "Frontend Developer Intern",
+    companyName: "[COMPANY NAME]",
+    location: "[LOCATION]",
+    type: "[REMOTE / ON-SITE]",
+    track: "Web Development",
+    stipend: "[STIPEND]",
+    duration: "[WEEKS]",
+    deadline: "[DATE]",
+    aboutRole: "[Two or three lines describing the project and team.]",
+    whatYouWillDo: [
+      "Build interface components from designs",
+      "Fix bugs and review code with a mentor",
+      "Present your work in weekly demos",
+    ],
     requirements: [
-      "Proficient in systems languages (Rust, C++, or Go)",
-      "Strong understanding of concurrency primitives and OS internals",
-      "Familiarity with network sockets and binary RPC framing",
+      "Basic HTML, CSS and JavaScript",
+      "[Any programme prerequisite]",
     ],
-    perks: [
-      "INR 45,000 / month stipend",
-      "Direct mentorship from former L6 distributed systems engineers",
-      "Hardware allowance and book budget",
-      "High PPO conversion rate",
-    ],
+    skills: ["HTML", "CSS", "JavaScript", "React"],
   },
   {
     id: "intern-02",
-    title: "Full-Stack TypeScript Engineer Intern",
-    companyName: "KiteMetrics HQ",
-    location: "Remote (India)",
-    type: "REMOTE",
-    stipend: 38000,
-    currency: "INR",
-    durationMonths: 4,
-    openings: 3,
-    deadline: "2026-12-20T23:59:59.000Z",
-    skills: ["Next.js", "TypeScript", "Tailwind CSS", "Prisma"],
-    description:
-      "Design and ship mission-critical operational analytics interfaces using Next.js 14 App Router, strict TypeScript, and Tailwind CSS. You will collaborate directly with design and backend teams to deliver sub-100ms dashboards compliant with WCAG AA.",
+    slug: "mobile-app-intern",
+    title: "Mobile App Intern",
+    companyName: "[COMPANY NAME]",
+    location: "[LOCATION]",
+    type: "[REMOTE / ON-SITE]",
+    track: "App Development",
+    stipend: "[STIPEND]",
+    duration: "[WEEKS]",
+    deadline: "[DATE]",
+    aboutRole: "[Two or three lines describing the project and team.]",
+    whatYouWillDo: [
+      "Implement mobile screens using React Native or Flutter",
+      "Connect frontend screens to backend REST APIs",
+      "Write unit tests for core user interactions",
+    ],
     requirements: [
-      "Demonstrated experience with React 18 / Next.js and strict TypeScript",
-      "Solid comprehension of state management and server component boundaries",
-      "Strong aesthetic sensibility and adherence to strict design tokens",
+      "Familiarity with mobile interface layout principles",
+      "Basic understanding of asynchronous state handling",
     ],
-    perks: [
-      "INR 38,000 / month stipend",
-      "Flexible working hours across Indian standard time",
-      "Latest M-series development machine provided",
-    ],
+    skills: ["React Native", "Flutter", "TypeScript"],
   },
   {
     id: "intern-03",
-    title: "Cloud Infrastructure & Platform Intern",
-    companyName: "Aether Cloud Infrastructure",
-    location: "Hyderabad (On-Site)",
-    type: "ON_SITE",
-    stipend: 50000,
-    currency: "INR",
-    durationMonths: 6,
-    openings: 1,
-    deadline: "2026-12-10T23:59:59.000Z",
-    skills: ["Kubernetes", "Terraform", "Docker", "Prometheus", "CI/CD"],
-    description:
-      "Maintain and automate our bare-metal Kubernetes clusters, implement GitOps pipelines with ArgoCD, and build self-service developer tooling for over 200 microservices.",
+    slug: "data-analyst-intern",
+    title: "Data Analyst Intern",
+    companyName: "[COMPANY NAME]",
+    location: "[LOCATION]",
+    type: "[REMOTE / ON-SITE]",
+    track: "Data & AI",
+    stipend: "[STIPEND]",
+    duration: "[WEEKS]",
+    deadline: "[DATE]",
+    aboutRole: "[Two or three lines describing the project and team.]",
+    whatYouWillDo: [
+      "Clean, transform, and aggregate operational event logs",
+      "Build visual dashboards and KPI reports",
+      "Perform exploratory data analysis with mentors",
+    ],
     requirements: [
-      "Hands-on experience with Linux system administration and shell scripting",
-      "Understanding of container runtimes and Kubernetes control plane",
-      "Familiarity with declarative IaC (Terraform or OpenTofu)",
+      "Basic Python programming (pandas, numpy)",
+      "Working knowledge of SQL queries and joins",
     ],
-    perks: [
-      "INR 50,000 / month stipend",
-      "Daily catered meals and commuter shuttle service",
-      "Pre-placement offer opportunity based on mid-term review",
-    ],
+    skills: ["Python", "SQL", "Pandas", "Tableau"],
   },
   {
     id: "intern-04",
-    title: "Security Engineering & Cryptography Intern",
-    companyName: "CipherVault",
-    location: "Remote (Global)",
-    type: "REMOTE",
-    stipend: 55000,
-    currency: "INR",
-    durationMonths: 5,
-    openings: 2,
-    deadline: "2026-12-30T23:59:59.000Z",
-    skills: ["Python", "Rust", "Zero-Knowledge", "Cryptography", "AppSec"],
-    description:
-      "Perform static and dynamic security assessments on cryptographic primitives, write fuzzing harnesses, and review multi-tenant payment gateway signatures.",
+    slug: "ui-ux-design-intern",
+    title: "UI/UX Design Intern",
+    companyName: "[COMPANY NAME]",
+    location: "[LOCATION]",
+    type: "[REMOTE / ON-SITE]",
+    track: "UI/UX Design",
+    stipend: "[STIPEND]",
+    duration: "[WEEKS]",
+    deadline: "[DATE]",
+    aboutRole: "[Two or three lines describing the project and team.]",
+    whatYouWillDo: [
+      "Create low-fidelity wireframes and user flow diagrams",
+      "Design high-fidelity UI components following design tokens",
+      "Participate in usability interviews with students and employers",
+    ],
     requirements: [
-      "Background in applied cryptography and public key infrastructure",
-      "Experience with fuzzing tools (AFL++, cargo-fuzz) and reverse engineering",
-      "Rigorous commitment to defensive coding standards",
+      "Proficiency with Figma components and auto-layout",
+      "Understanding of typographic scale and visual hierarchy",
     ],
-    perks: [
-      "INR 55,000 / month stipend",
-      "Full conference sponsorship for DefCon or BlackHat",
-      "Remote office setup stipend",
+    skills: ["Figma", "Design Systems", "Prototyping"],
+  },
+  {
+    id: "intern-05",
+    slug: "backend-developer-intern",
+    title: "Backend Developer Intern",
+    companyName: "[COMPANY NAME]",
+    location: "[LOCATION]",
+    type: "[REMOTE / ON-SITE]",
+    track: "Web Development",
+    stipend: "[STIPEND]",
+    duration: "[WEEKS]",
+    deadline: "[DATE]",
+    aboutRole: "[Two or three lines describing the project and team.]",
+    whatYouWillDo: [
+      "Design and document RESTful endpoints using OpenAPI / Zod",
+      "Write unit and integration tests using Vitest or Jest",
+      "Inspect relational database schema queries and indexes",
     ],
+    requirements: [
+      "Basic understanding of Node.js and HTTP status codes",
+      "Familiarity with PostgreSQL or relational databases",
+    ],
+    skills: ["Node.js", "Express", "TypeScript", "PostgreSQL"],
   },
 ];
 
@@ -123,154 +137,135 @@ export interface TrainingProgramItem {
   id: string;
   slug: string;
   title: string;
-  track: string;
-  priceINR: number;
-  priceUSD: number;
-  durationWeeks: number;
-  level: string;
-  cohortStart: string;
-  seatsTotal: number;
-  seatsLeft: number;
-  summary: string;
+  trackCategory: "Web" | "App" | "Data & AI" | "Design";
+  mode: string;
+  weeks: string;
+  fee: string;
+  startDate: string;
+  seatsLeft: string;
+  description: string;
   syllabus: {
     week: number;
     title: string;
     description: string;
-    deliverables: string[];
   }[];
-  outcomes: string[];
-  tools: string[];
+  prerequisites: string[];
 }
 
 export const MOCK_TRAINING_PROGRAMS: TrainingProgramItem[] = [
   {
-    id: "prog-systems-01",
-    slug: "systems-and-distributed-computing",
-    title: "Systems & Distributed Engineering",
-    track: "SYSTEMS",
-    priceINR: 12499,
-    priceUSD: 149,
-    durationWeeks: 10,
-    level: "Intermediate to Advanced",
-    cohortStart: "2026-12-01",
-    seatsTotal: 40,
-    seatsLeft: 12,
-    summary:
-      "A rigorous, engineering-first laboratory mastering low-latency primitives, concurrency models, consensus mechanisms (Raft), and distributed storage internals.",
+    id: "prog-01",
+    slug: "full-stack-web-development",
+    title: "Full-Stack Web Development",
+    trackCategory: "Web",
+    mode: "[MODE]",
+    weeks: "[WEEKS]",
+    fee: "[FEE]",
+    startDate: "[DATE]",
+    seatsLeft: "[NUMBER]",
+    description:
+      "HTML to full-stack, built on real projects. Learn Next.js App Router, strict TypeScript, Tailwind CSS, and database integration.",
     syllabus: [
-      {
-        week: 1,
-        title: "OS Primitives & Memory Layout",
-        description: "Memory models, pointer arithmetic, system calls, virtual memory, cache lines.",
-        deliverables: ["Custom malloc implementation", "POSIX thread pool benchmark"],
-      },
-      {
-        week: 2,
-        title: "Network Programming & Wire Protocols",
-        description: "TCP handshake, socket programming, binary serialization, custom RPC frames.",
-        deliverables: ["Binary RPC serialization parser"],
-      },
-      {
-        week: 3,
-        title: "Log-Structured Storage & LSM Trees",
-        description: "Write-ahead logging (WAL), memtable design, SSTable compaction, Bloom filters.",
-        deliverables: ["Single-node KV engine with WAL crash recovery"],
-      },
-      {
-        week: 4,
-        title: "Distributed Consensus (Raft)",
-        description: "Leader election, log replication, safety invariants, network partition handling.",
-        deliverables: ["3-node replicated state machine passing fault injection suite"],
-      },
+      { week: 1, title: "Modern HTML & Semantic Layouts", description: "Semantic markup, WCAG accessibility, and responsive grids." },
+      { week: 2, title: "TypeScript & React Architecture", description: "Strict typing, component boundaries, and state management." },
+      { week: 3, title: "Next.js App Router & Server Components", description: "SSR, streaming, API route handlers, and caching." },
+      { week: 4, title: "Database Integration & Full Deployment", description: "PostgreSQL, Prisma, authentication, and cloud deployment." },
     ],
-    outcomes: [
-      "Architect resilient distributed micro-clusters",
-      "Benchmark throughput and p99 tail latency under load",
-      "Master ACID transaction mechanics and lock contention",
-    ],
-    tools: ["Rust", "C++", "Go", "Docker", "Wireshark", "Prometheus"],
+    prerequisites: ["Basic computer literacy", "Commitment to 10-15 hours of weekly laboratory work"],
   },
   {
-    id: "prog-fullstack-02",
-    slug: "production-fullstack-typescript",
-    title: "Production Full-Stack Architecture",
-    track: "FULL-STACK",
-    priceINR: 9999,
-    priceUSD: 119,
-    durationWeeks: 8,
-    level: "Intermediate",
-    cohortStart: "2026-12-15",
-    seatsTotal: 50,
-    seatsLeft: 18,
-    summary:
-      "Build industrial-grade web platforms with Next.js App Router, strict TypeScript, ACID transactional integrity, queue processing, and WCAG AA accessibility standards.",
+    id: "prog-02",
+    slug: "mobile-app-development",
+    title: "Mobile App Development",
+    trackCategory: "App",
+    mode: "[MODE]",
+    weeks: "[WEEKS]",
+    fee: "[FEE]",
+    startDate: "[DATE]",
+    seatsLeft: "[NUMBER]",
+    description:
+      "Ship a mobile app from idea to store. Build cross-platform applications with React Native, local persistence, and push notifications.",
     syllabus: [
-      {
-        week: 1,
-        title: "Strict Type Systems & Contract-Driven Design",
-        description: "End-to-end type safety, Zod runtime validation, OpenAPI schemas, and monorepos.",
-        deliverables: ["Shared contract workspace with automated schema regression checks"],
-      },
-      {
-        week: 2,
-        title: "Relational Modeling & Transaction Isolation",
-        description: "PostgreSQL indexing, query plans, deadlocks, Prisma transactions, idempotency.",
-        deliverables: ["Double-entry financial ledger passing concurrent checkout tests"],
-      },
-      {
-        week: 3,
-        title: "Next.js App Router, SSR & Streaming",
-        description: "Server Components, Suspense boundaries, caching strategies, and optimistic UI.",
-        deliverables: ["High-speed editorial platform with < 100ms TTFB"],
-      },
-      {
-        week: 4,
-        title: "Payment Systems & Webhook Verification",
-        description: "Razorpay/Stripe integrations, signature verification, retry idempotency queues.",
-        deliverables: ["Production-ready multi-gateway billing engine"],
-      },
+      { week: 1, title: "Mobile UI Layout & Flexbox", description: "Native components, gestures, and responsive view layouts." },
+      { week: 2, title: "Navigation & Device Sensors", description: "Stack navigators, camera, location, and storage." },
+      { week: 3, title: "App Store Packaging & Release", description: "Build variants, code signing, and beta testing distribution." },
     ],
-    outcomes: [
-      "Ship high-throughput enterprise TypeScript architectures",
-      "Implement compliant, secure billing workflows",
-      "Pass strict WCAG accessibility and performance audits",
-    ],
-    tools: ["Next.js", "TypeScript", "Tailwind CSS", "Prisma", "PostgreSQL", "Redis"],
+    prerequisites: ["Familiarity with JavaScript or TypeScript fundamentals"],
   },
   {
-    id: "prog-devops-03",
-    slug: "cloud-native-devops-and-k8s",
-    title: "Cloud-Native Infrastructure & Kubernetes",
-    track: "PLATFORM & CLOUD",
-    priceINR: 11499,
-    priceUSD: 139,
-    durationWeeks: 8,
-    level: "Advanced",
-    cohortStart: "2027-01-05",
-    seatsTotal: 35,
-    seatsLeft: 9,
-    summary:
-      "Zero-downtime deployments, Kubernetes operator patterns, multi-region CI/CD pipelines, Terraform IaC, and observability engineering.",
+    id: "prog-03",
+    slug: "data-analytics-with-python",
+    title: "Data Analytics with Python",
+    trackCategory: "Data & AI",
+    mode: "[MODE]",
+    weeks: "[WEEKS]",
+    fee: "[FEE]",
+    startDate: "[DATE]",
+    seatsLeft: "[NUMBER]",
+    description:
+      "Python, analytics and applied machine learning. Extract, clean, and visualize complex datasets to derive actionable intelligence.",
     syllabus: [
-      {
-        week: 1,
-        title: "Immutable Infrastructure with Terraform",
-        description: "VPC topology, security groups, state locking, and modular cloud architectures.",
-        deliverables: ["Terraform blueprint deploying an audited VPC with bastion access"],
-      },
-      {
-        week: 2,
-        title: "Kubernetes Core & Controller Internals",
-        description: "Pod lifecycle, Service topologies, Ingress controllers, and persistent volumes.",
-        deliverables: ["High-availability deployment with PodDisruptionBudgets and HPA"],
-      },
+      { week: 1, title: "Data Wrangling with Pandas", description: "Dataframes, missing value handling, and grouping." },
+      { week: 2, title: "SQL for Analytical Queries", description: "Window functions, common table expressions, and joins." },
+      { week: 3, title: "Interactive Dashboards", description: "Storytelling with data visualizations and automated reports." },
     ],
-    outcomes: [
-      "Provision production infrastructure with code",
-      "Deploy self-healing container topologies",
-      "Implement comprehensive Grafana/Prometheus alerting",
+    prerequisites: ["Basic high-school algebra and curiosity about data insights"],
+  },
+  {
+    id: "prog-04",
+    slug: "applied-machine-learning",
+    title: "Applied Machine Learning",
+    trackCategory: "Data & AI",
+    mode: "[MODE]",
+    weeks: "[WEEKS]",
+    fee: "[FEE]",
+    startDate: "[DATE]",
+    seatsLeft: "[NUMBER]",
+    description:
+      "Supervised and unsupervised models, evaluation metrics, feature engineering, and model deployment in production.",
+    syllabus: [
+      { week: 1, title: "Feature Engineering & Preprocessing", description: "Feature selection, scaling, and categorical encoding." },
+      { week: 2, title: "Classification & Regression Models", description: "Linear models, random forests, and gradient boosting." },
+      { week: 3, title: "Model Serving & APIs", description: "Wrapping models in FastAPI endpoints with Docker containers." },
     ],
-    tools: ["Kubernetes", "Docker", "Terraform", "GitHub Actions", "Grafana", "AWS"],
+    prerequisites: ["Working knowledge of Python and introductory statistics"],
+  },
+  {
+    id: "prog-05",
+    slug: "ui-ux-design",
+    title: "UI/UX Design",
+    trackCategory: "Design",
+    mode: "[MODE]",
+    weeks: "[WEEKS]",
+    fee: "[FEE]",
+    startDate: "[DATE]",
+    seatsLeft: "[NUMBER]",
+    description:
+      "Research, wireframes and polished interfaces. Master typography, grid systems, auto-layout, and interactive prototypes in Figma.",
+    syllabus: [
+      { week: 1, title: "User Research & Information Architecture", description: "User personas, journey mapping, and wireframing." },
+      { week: 2, title: "Design Systems & Token Architecture", description: "Color palettes, typography scales, and modular components." },
+      { week: 3, title: "High-Fidelity Prototyping & Handoff", description: "Interactive micro-animations and developer specifications." },
+    ],
+    prerequisites: ["No coding required; laptop capable of running Figma in browser"],
+  },
+  {
+    id: "prog-06",
+    slug: "backend-with-nodejs",
+    title: "Backend with Node.js",
+    trackCategory: "Web",
+    mode: "[MODE]",
+    weeks: "[WEEKS]",
+    fee: "[FEE]",
+    startDate: "[DATE]",
+    seatsLeft: "[NUMBER]",
+    description:
+      "Scalable REST and event-driven architectures. Master Node.js, Express, PostgreSQL transactions, indexing, and authentication.",
+    syllabus: [
+      { week: 1, title: "Event Loop & Asynchronous I/O", description: "Streams, buffers, worker threads, and HTTP architecture." },
+      { week: 2, title: "Relational Modeling & Prisma ORM", description: "Schema design, migrations, relations, and ACID transactions." },
+      { week: 3, title: "Security & Production Hardening", description: "Rate limiting, JWTs, CORS, structured logging, and Docker." },
+    ],
+    prerequisites: ["Basic familiarity with JavaScript syntax"],
   },
 ];
-

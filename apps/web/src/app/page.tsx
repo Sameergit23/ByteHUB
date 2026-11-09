@@ -1,6 +1,24 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Button } from "../components/ui/Button";
 import { Card, CardTitle } from "../components/ui/Card";
+import { ColophonFooter } from "../components/layout/ColophonFooter";
+
+export const metadata: Metadata = {
+  title: "ByteHUB — Real projects. Real mentors. Your first step into tech.",
+  description:
+    "Learn a skill in a guided training programme, then prove it on a live internship project.",
+  openGraph: {
+    title: "ByteHUB — Real projects. Real mentors. Your first step into tech.",
+    description:
+      "Learn a skill in a guided training programme, then prove it on a live internship project.",
+    url: "https://bytehub.io",
+    siteName: "ByteHUB",
+    images: [{ url: "/og-image.png", width: 1200, height: 630 }],
+    locale: "en_US",
+    type: "website",
+  },
+};
 
 export default function HomePage() {
   const tracks = [
@@ -8,25 +26,25 @@ export default function HomePage() {
       num: "01",
       title: "Web Development",
       description: "HTML to full-stack, built on real projects.",
-      href: "/training/production-fullstack-typescript",
+      href: "/training/full-stack-web-development",
     },
     {
       num: "02",
       title: "App Development",
       description: "Ship a mobile app from idea to store.",
-      href: "/training/systems-and-distributed-computing",
+      href: "/training/mobile-app-development",
     },
     {
       num: "03",
       title: "Data & AI",
       description: "Python, analytics and applied machine learning.",
-      href: "/training/cloud-native-devops-and-k8s",
+      href: "/training/data-analytics-with-python",
     },
     {
       num: "04",
       title: "UI/UX Design",
       description: "Research, wireframes and polished interfaces.",
-      href: "/training",
+      href: "/training/ui-ux-design",
     },
   ];
 
@@ -50,9 +68,9 @@ export default function HomePage() {
 
   return (
     <div className="w-full bg-canvas">
-      {/* Hero Section Matching Image 1 */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-start">
+      {/* 1. Hero Section Matching Image 1 */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-20 lg:py-24">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-14 items-start">
           {/* Left Column: Eyebrow, Main Heading, Lead text, Buttons */}
           <div className="lg:col-span-7 space-y-6">
             <p className="text-xs sm:text-sm font-sans font-semibold text-accent tracking-normal">
@@ -115,15 +133,16 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Thin 1px divider across full width matching Image 1 */}
+      {/* Horizontal 1px dividing line */}
       <hr className="border-t border-editorial-border" />
 
-      {/* Section: Choose your track Matching Image 1 */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24 space-y-10">
+      {/* 2. Choose your track Matching Image 1 */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-20 lg:py-24 space-y-10">
         <h2 className="font-heading text-3xl sm:text-4xl font-bold tracking-tight text-ink">
           Choose your track
         </h2>
 
+        {/* Responsive Grid: 4 cols on lg, 2 cols on sm, 1 col on mobile xs */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {tracks.map((track) => (
             <Card
@@ -156,11 +175,11 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Thin 1px divider across full width matching Image 1 */}
+      {/* Horizontal 1px dividing line */}
       <hr className="border-t border-editorial-border" />
 
-      {/* Section: How it works Matching Image 1 */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24 space-y-12">
+      {/* 3. How it works Matching Image 1 */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-20 lg:py-24 space-y-12">
         <h2 className="font-heading text-3xl sm:text-4xl font-bold tracking-tight text-ink">
           How it works
         </h2>
@@ -181,6 +200,23 @@ export default function HomePage() {
           ))}
         </div>
       </section>
+
+      {/* 4. Final Apply Banner Matching Image 2 Style */}
+      <section className="w-full bg-[#16150F] text-white py-12 sm:py-16">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
+          <h2 className="font-heading text-3xl sm:text-4xl font-bold tracking-tight">
+            Start with one application.
+          </h2>
+          <Link href="/internships">
+            <Button variant="primary" size="md">
+              Apply now
+            </Button>
+          </Link>
+        </div>
+      </section>
+
+      {/* Minimal Colophon Footer Matching Image 1 / 2 */}
+      <ColophonFooter />
     </div>
   );
 }

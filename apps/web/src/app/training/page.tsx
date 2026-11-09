@@ -1,124 +1,116 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+import { Card } from "../../components/ui/Card";
+import { ColophonFooter } from "../../components/layout/ColophonFooter";
 import { MOCK_TRAINING_PROGRAMS } from "../../lib/mockData";
 
-export default function TrainingListPage() {
+export const metadata: Metadata = {
+  title: "Training Programmes — ByteHUB",
+  description: "Pick a track, learn in cohorts, finish with a project.",
+  openGraph: {
+    title: "Training Programmes — ByteHUB",
+    description: "Pick a track, learn in cohorts, finish with a project.",
+    url: "https://bytehub.io/training",
+  },
+};
+
+export default function TrainingPage({
+  searchParams,
+}: {
+  searchParams?: {
+    track?: string;
+  };
+}) {
+  const selectedTrack = searchParams?.track || "All";
+
+  const categories = ["All", "Web", "App", "Data & AI", "Design"] as const;
+
+  const filtered = MOCK_TRAINING_PROGRAMS.filter((prog) => {
+    if (selectedTrack === "All") return true;
+    return prog.trackCategory === selectedTrack;
+  });
+
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-10">
-      {/* Editorial Header */}
-      <div className="border border-editorial-border p-8 sm:p-12 bg-white space-y-4">
-        <div className="flex flex-wrap items-center justify-between text-xs font-mono uppercase tracking-widest text-editorial-muted border-b border-editorial-border pb-3">
-          <span>// CURRICULUM SYLLABUS DISPATCH</span>
-          <span>WINTER / SPRING 2026 COHORTS</span>
+    <div className="w-full bg-canvas min-h-screen py-12 sm:py-16">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+        {/* Header Matching Image 5 */}
+        <div className="space-y-3">
+          <p className="text-xs sm:text-sm font-sans font-semibold text-accent tracking-normal">
+            Training
+          </p>
+          <h1 className="font-heading text-4xl sm:text-5xl font-bold tracking-tight text-ink">
+            Programmes
+          </h1>
+          <p className="font-sans text-sm sm:text-base text-editorial-muted max-w-2xl leading-relaxed">
+            Pick a track, learn in cohorts, finish with a project.
+          </p>
         </div>
-        <h1 className="font-heading text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-ink">
-          PAID SYSTEMS TRAINING & ADVANCED LABS
-        </h1>
-        <p className="font-sans text-xs sm:text-sm text-editorial-muted max-w-3xl leading-relaxed">
-          Intensive, laboratory-style cohorts designed for engineers preparing for high-bar platform teams. Live code reviews, production post-mortems, and verifiable deliverables evaluated by principal engineers.
-        </p>
-      </div>
 
-      {/* Program Grid */}
-      <div className="space-y-8">
-        {MOCK_TRAINING_PROGRAMS.map((program, idx) => (
-          <div
-            key={program.id}
-            className="border border-editorial-border bg-white p-8 sm:p-10 space-y-6 hover:bg-editorial-surface transition-colors"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-editorial-border pb-4">
-              <div className="flex items-center gap-3 text-xs font-mono">
-                <span className="bg-ink text-canvas px-2 py-0.5 font-bold">[ TRACK 0{idx + 1} ]</span>
-                <span className="text-editorial-muted uppercase">{program.track}</span>
-              </div>
-              <div className="text-xs font-mono text-accent font-bold">
-                ● {program.seatsLeft} OF {program.seatsTotal} SEATS REMAINING
-              </div>
-            </div>
+        {/* Filter Pills Matching Image 5 */}
+        <nav
+          aria-label="Filter training programmes by track"
+          className="flex flex-wrap items-center gap-2 pt-2"
+        >
+          {categories.map((cat) => {
+            const isActive = selectedTrack === cat;
+            return (
+              <Link
+                key={cat}
+                href={cat === "All" ? "/training" : `/training?track=${encodeURIComponent(cat)}`}
+                className={`min-h-[44px] px-4 py-2 text-xs font-sans font-semibold border transition-colors inline-flex items-center justify-center ${
+                  isActive
+                    ? "bg-[#16150F] text-white border-[#16150F]"
+                    : "bg-white text-ink border-editorial-border hover:border-ink"
+                }`}
+              >
+                {cat}
+              </Link>
+            );
+          })}
+        </nav>
 
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
-              <div className="md:col-span-8 space-y-4">
-                <h2 className="font-heading text-2xl sm:text-3xl font-bold text-ink">
-                  <Link href={`/training/${program.slug}`} className="hover:text-accent transition-colors">
-                    {program.title}
+        {/* 6 Grid Cards Matching Image 5 */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pt-4">
+          {filtered.map((prog) => (
+            <Card
+              key={prog.id}
+              padding="lg"
+              className="flex flex-col justify-between space-y-6 hover:border-ink transition-colors"
+            >
+              <div className="space-y-3">
+                {/* [MODE] tag matching Image 5 */}
+                <div>
+                  <span className="inline-block border border-editorial-border bg-white px-2 py-0.5 text-[11px] font-mono text-editorial-muted">
+                    {prog.mode}
+                  </span>
+                </div>
+
+                <h2 className="font-heading text-xl font-bold text-ink">
+                  <Link href={`/training/${prog.slug}`} className="hover:text-accent">
+                    {prog.title}
                   </Link>
                 </h2>
-                <p className="text-sm font-sans text-editorial-muted leading-relaxed">
-                  {program.summary}
+
+                <p className="font-mono text-xs text-editorial-muted">
+                  {prog.weeks} weeks · {prog.fee}
                 </p>
-
-                {/* Key Outcomes */}
-                <div className="space-y-2 pt-2">
-                  <span className="text-xs font-mono font-bold uppercase text-editorial-muted">
-                    KEY ENGINEERING OUTCOMES:
-                  </span>
-                  <ul className="space-y-1 text-xs font-sans text-ink">
-                    {program.outcomes.map((outcome, oIdx) => (
-                      <li key={oIdx} className="flex items-center gap-2">
-                        <span className="font-mono text-accent font-bold">→</span>
-                        <span>{outcome}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                {/* Tools */}
-                <div className="flex flex-wrap items-center gap-2 pt-2">
-                  <span className="text-[11px] font-mono text-editorial-muted">TOOLCHAIN:</span>
-                  {program.tools.map((tool) => (
-                    <span
-                      key={tool}
-                      className="border border-editorial-border bg-canvas px-2 py-0.5 text-[11px] font-mono text-ink"
-                    >
-                      {tool}
-                    </span>
-                  ))}
-                </div>
               </div>
 
-              {/* Sidebar card */}
-              <div className="md:col-span-4 border border-editorial-border p-6 bg-canvas space-y-5 font-mono text-xs">
-                <div className="space-y-2 border-b border-editorial-line pb-4">
-                  <div className="text-[11px] text-editorial-muted">TUITION / REGISTRATION:</div>
-                  <div className="font-heading text-2xl font-bold text-ink">
-                    ₹{program.priceINR.toLocaleString("en-IN")}{" "}
-                    <span className="text-xs font-normal text-editorial-muted">
-                      / ${program.priceUSD} USD
-                    </span>
-                  </div>
-                  <div className="text-[10px] text-editorial-muted">
-                    INCLUSIVE OF GST & PCI-COMPLIANT GATEWAY VERIFICATION
-                  </div>
-                </div>
-
-                <div className="space-y-2 text-editorial-muted text-[11px]">
-                  <div className="flex justify-between">
-                    <span>DURATION:</span>
-                    <span className="text-ink font-bold">{program.durationWeeks} WEEKS</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>COHORT START:</span>
-                    <span className="text-ink font-bold">{program.cohortStart}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>DIFFICULTY:</span>
-                    <span className="text-ink font-bold">{program.level}</span>
-                  </div>
-                </div>
-
-                <div className="pt-2">
-                  <Link
-                    href={`/training/${program.slug}`}
-                    className="block text-center border-2 border-ink bg-ink text-canvas hover:bg-accent hover:border-accent hover:text-white py-3 font-bold tracking-wider transition-colors"
-                  >
-                    VIEW FULL SYLLABUS & ENROLL →
-                  </Link>
-                </div>
+              <div className="pt-2">
+                <Link
+                  href={`/training/${prog.slug}`}
+                  className="font-sans text-xs font-semibold text-ink hover:text-accent underline underline-offset-4"
+                >
+                  View programme →
+                </Link>
               </div>
-            </div>
-          </div>
-        ))}
+            </Card>
+          ))}
+        </div>
       </div>
+
+      {/* Colophon Footer Matching Image 5 */}
+      <ColophonFooter className="mt-20" />
     </div>
   );
 }
-

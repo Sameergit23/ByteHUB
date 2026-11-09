@@ -1,102 +1,126 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+import { Button } from "../../components/ui/Button";
+import { Card } from "../../components/ui/Card";
+import { ColophonFooter } from "../../components/layout/ColophonFooter";
+
+export const metadata: Metadata = {
+  title: "About Us — ByteHUB",
+  description:
+    "We help students become working developers. [YOUR BRAND] pairs structured training with live internship projects.",
+  openGraph: {
+    title: "About Us — ByteHUB",
+    description:
+      "We help students become working developers. [YOUR BRAND] pairs structured training with live internship projects.",
+    url: "https://bytehub.io/about",
+    siteName: "ByteHUB",
+  },
+};
 
 export default function AboutPage() {
+  const valueCards = [
+    {
+      title: "Learn by building",
+      description: "Every programme ends with a project you can show.",
+    },
+    {
+      title: "Mentors who work in the field",
+      description: "Sessions and reviews from active developers.",
+    },
+    {
+      title: "A clear path to work",
+      description: "Training leads into internship interviews.",
+    },
+  ];
+
+  const team = [
+    { name: "[NAME]", role: "[ROLE]" },
+    { name: "[NAME]", role: "[ROLE]" },
+    { name: "[NAME]", role: "[ROLE]" },
+    { name: "[NAME]", role: "[ROLE]" },
+  ];
+
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-12">
-      {/* Header */}
-      <div className="border border-editorial-border p-8 sm:p-12 bg-white space-y-4">
-        <div className="flex items-center justify-between text-xs font-mono uppercase tracking-widest text-editorial-muted border-b border-editorial-border pb-4">
-          <span>// DOCUMENT NO. 01</span>
-          <span>THE BYTEHUB MANIFESTO</span>
-        </div>
-        <h1 className="font-heading text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-ink leading-tight">
-          A RIGOROUS TALENT INFRASTRUCTURE FOR SYSTEMS AND PRODUCTION SOFTWARE.
-        </h1>
-        <p className="font-sans text-sm sm:text-base text-editorial-muted leading-relaxed max-w-3xl">
-          ByteHUB was founded on a simple observation: modern computer science education is disconnected from how production software is actually written, deployed, and scaled. We exist to eliminate that gap through verifiable work, fair pay, and zero-compromise technical training.
-        </p>
-      </div>
-
-      {/* Tenets Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="border border-editorial-border p-6 bg-canvas space-y-3">
-          <div className="font-mono text-xs text-accent font-bold">[ PRINCIPLE 01 ]</div>
-          <h2 className="font-heading text-lg font-bold text-ink">COMPENSATION AS RESPECT</h2>
-          <p className="text-xs font-sans text-editorial-muted leading-relaxed">
-            Unpaid internships are banned from ByteHUB. Engineers write production code that yields enterprise value; paying them is not a courtesy, it is an ethical and economic imperative.
+    <div className="w-full bg-canvas min-h-screen">
+      {/* 1. Hero & Value Cards Matching Image 2 */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-20 lg:py-24 space-y-12">
+        <div className="space-y-4 max-w-3xl">
+          <p className="text-xs sm:text-sm font-sans font-semibold text-accent tracking-normal">
+            About us
+          </p>
+          <h1 className="font-heading text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-ink leading-[1.08]">
+            We help students become working developers.
+          </h1>
+          <p className="font-sans text-base sm:text-lg text-editorial-muted leading-relaxed">
+            [YOUR BRAND] pairs structured training with live internship projects.
           </p>
         </div>
 
-        <div className="border border-editorial-border p-6 bg-canvas space-y-3">
-          <div className="font-mono text-xs text-accent font-bold">[ PRINCIPLE 02 ]</div>
-          <h2 className="font-heading text-lg font-bold text-ink">SYSTEMS-FIRST LABS</h2>
-          <p className="text-xs font-sans text-editorial-muted leading-relaxed">
-            We don't teach toy to-do apps. Our training tracks dissect memory safety, POSIX system calls, write-ahead logs, Raft consensus, and transactional isolation under concurrent load.
-          </p>
+        {/* 3 Value Cards in a row matching Image 2 */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4">
+          {valueCards.map((card, idx) => (
+            <Card key={idx} padding="lg" className="space-y-3">
+              <h3 className="font-heading text-lg font-bold text-ink">
+                {card.title}
+              </h3>
+              <p className="font-sans text-xs sm:text-sm text-editorial-muted leading-relaxed">
+                {card.description}
+              </p>
+            </Card>
+          ))}
         </div>
+      </section>
 
-        <div className="border border-editorial-border p-6 bg-canvas space-y-3">
-          <div className="font-mono text-xs text-accent font-bold">[ PRINCIPLE 03 ]</div>
-          <h2 className="font-heading text-lg font-bold text-ink">PROOF OF WORK</h2>
-          <p className="text-xs font-sans text-editorial-muted leading-relaxed">
-            Every ByteHUB applicant submits actual code artifacts, architectural breakdowns, and public Git repositories rather than formatted buzzwords on PDFs.
-          </p>
+      {/* Horizontal divider */}
+      <hr className="border-t border-editorial-border" />
+
+      {/* 2. Our Team Section Matching Image 2 */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-20 lg:py-24 space-y-10">
+        <h2 className="font-heading text-3xl sm:text-4xl font-bold tracking-tight text-ink">
+          Our team
+        </h2>
+
+        {/* 4 Team Cards Matching Image 2 */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {team.map((member, idx) => (
+            <div
+              key={idx}
+              className="border border-editorial-border bg-white flex flex-col"
+            >
+              {/* Gray placeholder image box matching Image 2 */}
+              <div
+                className="w-full aspect-[4/3] bg-[#D8D3C4] border-b border-editorial-border"
+                aria-hidden="true"
+              />
+              <div className="p-4 sm:p-5 space-y-1 bg-white">
+                <div className="font-heading font-bold text-sm text-ink">
+                  {member.name}
+                </div>
+                <div className="font-mono text-xs text-editorial-muted">
+                  {member.role}
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
-      </div>
+      </section>
 
-      {/* Editorial Standards Table */}
-      <div className="border border-editorial-border bg-white p-8 space-y-6">
-        <div className="border-b border-editorial-border pb-4">
-          <span className="text-xs font-mono text-editorial-muted uppercase">[ SPECIFICATION ]</span>
-          <h2 className="font-heading text-2xl font-bold text-ink mt-1">
-            PLATFORM ARCHITECTURAL SPECIFICATION
+      {/* 3. Final Apply Banner Matching Image 2 */}
+      <section className="w-full bg-[#16150F] text-white py-12 sm:py-16">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
+          <h2 className="font-heading text-3xl sm:text-4xl font-bold tracking-tight">
+            Start with one application.
           </h2>
-        </div>
-
-        <div className="divide-y divide-editorial-border font-mono text-xs">
-          <div className="py-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <span className="text-editorial-muted">FRONTEND STACK</span>
-            <span className="sm:col-span-2 text-ink font-semibold">
-              Next.js 14 App Router, TypeScript (Strict), Tailwind CSS, WCAG 2.2 AA
-            </span>
-          </div>
-          <div className="py-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <span className="text-editorial-muted">BACKEND RUNTIME</span>
-            <span className="sm:col-span-2 text-ink font-semibold">
-              Node.js + Express.js API, Zod Schema Validation, Layered Architecture
-            </span>
-          </div>
-          <div className="py-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <span className="text-editorial-muted">DATA & TRANSACTIONS</span>
-            <span className="sm:col-span-2 text-ink font-semibold">
-              PostgreSQL via Prisma ORM with strict ACID transaction isolation
-            </span>
-          </div>
-          <div className="py-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <span className="text-editorial-muted">PAYMENTS</span>
-            <span className="sm:col-span-2 text-ink font-semibold">
-              Razorpay (India UPI / Cards / Netbanking) & Stripe (Global Cards)
-            </span>
-          </div>
-          <div className="py-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <span className="text-editorial-muted">DESIGN PHILOSOPHY</span>
-            <span className="sm:col-span-2 text-ink font-semibold">
-              Swiss Modernist editorial layout: #F5F2EA, #16150F, #B8341A, square corners, 8px grid
-            </span>
-          </div>
-        </div>
-
-        <div className="pt-4 flex items-center justify-between border-t border-editorial-border">
-          <span className="text-xs font-mono text-editorial-muted">BYTEHUB REVISION HASH: b8f912c</span>
-          <Link
-            href="/internships"
-            className="border border-ink bg-ink text-canvas hover:bg-accent hover:border-accent hover:text-white px-4 py-2 text-xs font-mono font-bold tracking-wider transition-colors"
-          >
-            DISCOVER OPENINGS →
+          <Link href="/internships">
+            <Button variant="primary" size="md">
+              Apply now
+            </Button>
           </Link>
         </div>
-      </div>
+      </section>
+
+      {/* 4. Minimal Colophon Footer Matching Image 2 */}
+      <ColophonFooter />
     </div>
   );
 }
-
