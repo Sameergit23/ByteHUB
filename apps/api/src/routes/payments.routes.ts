@@ -1,38 +1,67 @@
-import { Router } from "express";
+import { Router, raw } from "express";
 import { PaymentController } from "../controllers/payment.controller.js";
-import { validateRequest } from "../validators/validate.middleware.js";
-import { authenticateJWT } from "../middleware/auth.js";
-import {
-  CreateOrderRequestSchema,
-  VerifyRazorpayPaymentSchema,
-  VerifyStripePaymentSchema,
-} from "@bytehub/shared";
+import { authenticateJWT, requireRole } from "../middleware/auth.js";
 
 export const paymentsRouter = Router();
 
+// ---------------------------------------------------------------------------
+// 1. Webhooks (Mount express.raw for raw body verification; CSRF bypassed)
+// ---------------------------------------------------------------------------
 paymentsRouter.post(
-  "/create-order",
-  authenticateJWT,
-  validateRequest({ body: CreateOrderRequestSchema }),
-  PaymentController.createOrder
+  "/webhooks/razorpay",
+  raw({ type: "*/*" }),
+  PaymentController.razorpayWebhook
 );
 
 paymentsRouter.post(
-  "/razorpay/verify",
+  "/webhooks/stripe",
+  raw({ type: "*/*" }),
+  PaymentController.stripeWebhook
+);
+
+// ---------------------------------------------------------------------------
+// 2. Client Payment Creation & Checkout
+// ---------------------------------------------------------------------------
+paymentsRouter.post(
+  "/create-intent",
   authenticateJWT,
-  validateRequest({ body: VerifyRazorpayPaymentSchema }),
-  PaymentController.verifyRazorpay
+  PaymentController.createIntent
 );
 
 paymentsRouter.post(
-  "/stripe/verify",
+  "/razorpay/verify-client",
   authenticateJWT,
-  validateRequest({ body: VerifyStripePaymentSchema }),
-  PaymentController.verifyStripe
+  PaymentController.verifyClient
+);
+
+// ---------------------------------------------------------------------------
+// 3. Status Polling & Invoices (Source of truth is polling our verified state)
+// ---------------------------------------------------------------------------
+paymentsRouter.get(
+  "/status/:orderId",
+  authenticateJWT,
+  PaymentController.getStatus
 );
 
 paymentsRouter.get(
-  "/history",
+  "/:orderId/invoice",
   authenticateJWT,
-  PaymentController.getHistory
+  PaymentController.downloadInvoice
+);
+
+// ---------------------------------------------------------------------------
+// 4. Admin Management (Refunds & Reconciliation)
+// ---------------------------------------------------------------------------
+paymentsRouter.post(
+  "/refund",
+  authenticateJWT,
+  requireRole(["ADMIN"]),
+  PaymentController.refund
+);
+
+paymentsRouter.post(
+  "/jobs/reconcile",
+  authenticateJWT,
+  requireRole(["ADMIN"]),
+  PaymentController.reconcile
 );

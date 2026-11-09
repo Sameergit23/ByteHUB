@@ -154,3 +154,4 @@ export function hashToken(rawToken: string): string {
 export function generateSecureToken(bytes: number = 32): string {
   return crypto.randomBytes(bytes).toString("hex");
 }
+

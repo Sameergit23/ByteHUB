@@ -44,16 +44,20 @@ enum PaymentProvider {
 }
 
 enum PaymentStatus {
+  CREATED
   PENDING
-  SUCCESS
+  PAID
   FAILED
   REFUNDED
+  PARTIALLY_REFUNDED
 }
 
 enum EnrollmentStatus {
+  PENDING
   ACTIVE
   COMPLETED
   CANCELLED
+  EXPIRED
 }
 
 // ---------------------------------------------------------------------------
@@ -318,25 +322,29 @@ model Application {
 // ---------------------------------------------------------------------------
 
 model Enrollment {
-  id          String           @id @default(uuid())
-  userId      String
-  user        User             @relation(fields: [userId], references: [id], onDelete: Restrict)
-  cohortId    String
-  cohort      Cohort           @relation(fields: [cohortId], references: [id], onDelete: Restrict)
-  paymentId   String?
-  payment     Payment?         @relation(fields: [paymentId], references: [id], onDelete: SetNull)
-  status      EnrollmentStatus @default(ACTIVE)
-  deletedAt   DateTime?
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  id            String           @id @default(uuid())
+  userId        String
+  user          User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  cohortId      String
+  cohort        Cohort           @relation(fields: [cohortId], references: [id], onDelete: Restrict)
+  paymentId     String?
+  payment       Payment?         @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  status        EnrollmentStatus @default(PENDING)
+  reservedUntil DateTime?
+  priceAmount   Int              @default(0) // Captured price at reservation in smallest unit
+  currency      String           @default("INR")
+  deletedAt     DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
 
-  certificate Certificate?
+  certificate   Certificate?
 
   // Unique constraint: one enrollment per student per cohort
   @@unique([userId, cohortId])
   @@index([userId])
   @@index([cohortId])
   @@index([status])
+  @@index([reservedUntil])
 }
 
 model Payment {
@@ -349,7 +357,7 @@ model Payment {
   provider             PaymentProvider
   amount               Int             // Smallest unit (e.g. paise or cents). Never floats.
   currency             String          @default("INR")
-  status               PaymentStatus   @default(PENDING)
+  status               PaymentStatus   @default(CREATED)
   gatewayPaymentId     String?
   gatewaySignature     String?
   idempotencyKey       String          @unique

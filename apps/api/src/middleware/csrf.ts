@@ -24,8 +24,8 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
     return next();
   }
 
-  // 3. Webhook endpoints have their own HMAC signature verification
-  if (req.path.includes("/payments/webhook/")) {
+  // 3. Webhook endpoints have their own cryptographic HMAC signature verification
+  if (req.path.includes("/payments/webhook") || req.path.includes("/payments/webhooks")) {
     return next();
   }
 
@@ -77,3 +77,4 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
 
   next();
 }
+

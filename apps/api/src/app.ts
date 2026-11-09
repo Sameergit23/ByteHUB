@@ -59,8 +59,15 @@ export const createApp = (): Express => {
   });
   app.use("/api", limiter);
 
-  // 5. Body Parser
-  app.use(express.json({ limit: "2mb" }));
+  // 5. Body Parser (Capturing rawBody Buffer for cryptographic webhook signature verification)
+  app.use(
+    express.json({
+      limit: "2mb",
+      verify: (req, _res, buf) => {
+        (req as any).rawBody = buf;
+      },
+    })
+  );
 
   // 6. CSRF Protection for state-changing operations
   app.use(csrfProtection);
