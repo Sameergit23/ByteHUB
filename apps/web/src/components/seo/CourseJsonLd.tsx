@@ -57,3 +57,4 @@ export const CourseJsonLd: React.FC<{ course: CourseData }> = ({ course }) => {
     />
   );
 };
+

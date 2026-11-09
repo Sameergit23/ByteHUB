@@ -17,7 +17,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
   // Dynamic internship detail routes
   const internshipRoutes: MetadataRoute.Sitemap = MOCK_INTERNSHIPS.map((item) => ({
-    url: `${baseUrl}/internships/${item.slug}`,
+    url: `${baseUrl}/internships/${item.id}`,
     lastModified: now,
     changeFrequency: "weekly",
     priority: 0.8,
@@ -33,3 +33,4 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
   return [...staticRoutes, ...internshipRoutes, ...trainingRoutes];
 }
+

@@ -31,3 +31,4 @@ export const ColophonFooter: React.FC<ColophonFooterProps> = ({
     </footer>
   );
 };
+

@@ -76,7 +76,209 @@ Production-grade talent infrastructure connecting engineering students with vett
 
 ---
 
-## 3. The 13 Required Routes
+## 3. Database Entity-Relationship (ER) Diagram
+
+```mermaid
+erDiagram
+    User ||--o| StudentProfile : "has profile"
+    User ||--o| CompanyProfile : "has profile"
+    User ||--o{ RefreshToken : "owns"
+    User ||--o{ EmailVerificationToken : "owns"
+    User ||--o{ PasswordResetToken : "owns"
+    User ||--o{ Internship : "posts (as company)"
+    User ||--o{ Application : "submits (as student)"
+    User ||--o{ Enrollment : "enrolled in"
+    User ||--o{ Payment : "originates"
+    User ||--o{ Certificate : "awarded"
+    User ||--o{ AuditLog : "initiates"
+
+    Track ||--o{ Programme : "categorizes"
+    Track ||--o{ Internship : "classifies"
+
+    Programme ||--o{ Cohort : "schedules"
+
+    Cohort ||--o{ Enrollment : "admits"
+    Cohort ||--o{ Payment : "billed for"
+
+    Internship ||--o{ Application : "receives"
+
+    Enrollment ||--o| Certificate : "issues"
+    Enrollment }o--o| Payment : "settled by"
+
+    Payment ||--o{ Refund : "originates"
+    Payment ||--o{ PaymentEvent : "logs webhook"
+
+    User {
+        string id PK
+        string email UK
+        string passwordHash
+        string name
+        enum role
+        boolean isEmailVerified
+        datetime deletedAt
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    StudentProfile {
+        string id PK
+        string userId FK,UK
+        string college
+        int graduationYear
+        string degree
+        datetime deletedAt
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    CompanyProfile {
+        string id PK
+        string userId FK,UK
+        string companyName
+        boolean verified
+        datetime deletedAt
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    Track {
+        string id PK
+        string slug UK
+        string name
+        int displayOrder
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    Programme {
+        string id PK
+        string trackId FK
+        string slug UK
+        string title
+        boolean published
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    Cohort {
+        string id PK
+        string programmeId FK
+        string cohortCode UK
+        int priceAmount
+        string currency
+        int seatsTotal
+        int seatsLeft
+        datetime startDate
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    Internship {
+        string id PK
+        string companyId FK
+        string trackId FK
+        string slug UK
+        string title
+        enum type
+        int stipendAmount
+        string currency
+        enum status
+        datetime deadline
+        datetime deletedAt
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    Application {
+        string id PK
+        string internshipId FK
+        string studentId FK
+        enum status
+        datetime deletedAt
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    Enrollment {
+        string id PK
+        string userId FK
+        string cohortId FK
+        string paymentId FK
+        enum status
+        datetime deletedAt
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    Payment {
+        string id PK
+        string orderId UK
+        string userId FK
+        string cohortId FK
+        enum provider
+        int amount
+        string currency
+        enum status
+        string idempotencyKey UK
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    PaymentEvent {
+        string id PK
+        string paymentId FK
+        enum provider
+        string eventType
+        string eventId UK
+        boolean processed
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    Refund {
+        string id PK
+        string paymentId FK
+        int amount
+        string currency
+        string gatewayRefundId UK
+        string status
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    Certificate {
+        string id PK
+        string enrollmentId FK,UK
+        string userId FK
+        string certificateCode UK
+        string verificationUrl
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    ContactMessage {
+        string id PK
+        string email
+        string topic
+        boolean isRead
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    AuditLog {
+        string id PK
+        string userId FK
+        string action
+        string entityType
+        string entityId
+        datetime createdAt
+        datetime updatedAt
+    }
+```
+
+---
+
+## 4. The 13 Required Routes
 
 1. **Home (`/`)**: High-contrast headline, real metrics, featured roles, training tracks, comparison standard.
 2. **About (`/about`)**: Editorial manifesto, engineering principles, stack architecture specification.

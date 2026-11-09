@@ -63,3 +63,4 @@ export const JobPostingJsonLd: React.FC<{ job: JobPostingData }> = ({ job }) => 
     />
   );
 };
+
