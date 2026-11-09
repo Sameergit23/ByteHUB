@@ -1,0 +1,33 @@
+name: Security & OWASP Hardening Audit
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  secret-scan:
+    name: Gitleaks Secret Scanner
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  security-tests:
+    name: Run Security & RBAC Test Suites
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Run Native Test Runner
+        run: |
+          node --test apps/api/tests/auth-security.test.mjs apps/api/tests/applications.test.mjs apps/api/tests/payments-security.test.mjs apps/api/tests/dashboards-rbac.test.mjs

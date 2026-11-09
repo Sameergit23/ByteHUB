@@ -50,10 +50,13 @@ export const CourseJsonLd: React.FC<{ course: CourseData }> = ({ course }) => {
       : undefined,
   };
 
+  // Secure JSON serialization against script breakout XSS: replace '<' with unicode escape
+  const safeJsonString = JSON.stringify(jsonLd).replace(/</g, "\\u003c");
+
   return (
     <script
       type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      dangerouslySetInnerHTML={{ __html: safeJsonString }}
     />
   );
 };

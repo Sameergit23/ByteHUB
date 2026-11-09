@@ -62,3 +62,4 @@ export function validateStateTransition(
 export function canRefund(status: PaymentStatusType): boolean {
   return status === "PAID" || status === "PARTIALLY_REFUNDED";
 }
+

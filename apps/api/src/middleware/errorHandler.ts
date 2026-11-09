@@ -12,21 +12,26 @@ export function errorHandler(
   const isProduction = process.env.NODE_ENV === "production";
   const requestId = req.id || "unknown";
 
-  // 1. Zod Validation Errors
+  // 1. Zod Validation Errors (Unknown fields, type mismatches, missing required)
   if (err instanceof ZodError) {
-    const formatted = err.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join(", ");
+    const formatted = err.issues.map((i) => {
+      const field = i.path.join(".");
+      return field ? `${field}: ${i.message}` : i.message;
+    }).join(", ");
+
     logger.warn({ requestId, err: formatted }, "Validation Error");
 
     res.status(400).json({
       error: {
         code: "VALIDATION_ERROR",
         message: formatted,
+        requestId,
       },
     });
     return;
   }
 
-  // 2. Custom Application Errors
+  // 2. Custom Application Errors (Controlled operational errors)
   if (err instanceof AppError) {
     logger.warn(
       {
@@ -42,12 +47,14 @@ export function errorHandler(
       error: {
         code: err.code,
         message: err.message,
+        requestId,
       },
     });
     return;
   }
 
-  // 3. Unhandled Server Errors
+  // 3. Unhandled Server Errors (Database connection, unexpected runtime bugs)
+  // NEVER leak database details, SQL statements, or stack traces in responses
   logger.error(
     {
       requestId,
@@ -57,10 +64,15 @@ export function errorHandler(
     "Unhandled Internal Server Error"
   );
 
+  const safeMessage = isProduction
+    ? `An unexpected server error occurred. Please contact support with correlation ID: ${requestId}`
+    : err.message || "Internal server error";
+
   res.status(500).json({
     error: {
       code: "INTERNAL_SERVER_ERROR",
-      message: isProduction ? "An unexpected server error occurred" : err.message,
+      message: safeMessage,
+      requestId,
     },
   });
 }

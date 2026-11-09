@@ -448,3 +448,4 @@ test("Admin Refund: enforces remaining balance and releases seat on 100% refund"
   assert.equal(enrollmentStatus, "CANCELLED");
   assert.equal(cohortSeatsLeft, 5, "Full refund must restore the seat back to cohort");
 });
+

@@ -72,3 +72,15 @@ authRouter.get(
   authenticateJWT,
   AuthController.getMe
 );
+
+authRouter.get(
+  "/me/export",
+  authenticateJWT,
+  AuthController.exportData
+);
+
+authRouter.delete(
+  "/me",
+  authenticateJWT,
+  AuthController.deleteAccount
+);

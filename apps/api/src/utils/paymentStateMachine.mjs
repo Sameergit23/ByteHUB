@@ -79,3 +79,4 @@ export function canRefund(status) {
     status === PaymentStatus.PAID || status === PaymentStatus.PARTIALLY_REFUNDED
   );
 }
+

@@ -1,0 +1,49 @@
+import crypto from "node:crypto";
+
+const ALGORITHM = "aes-256-gcm";
+const IV_LENGTH = 12;
+
+export function encryptAtRest(text: string, secretKey: string | Buffer): string {
+  if (!text) return text;
+
+  const key = Buffer.isBuffer(secretKey)
+    ? secretKey
+    : crypto.createHash("sha256").update(secretKey).digest();
+
+  const iv = crypto.randomBytes(IV_LENGTH);
+  const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
+
+  let encrypted = cipher.update(text, "utf8", "hex");
+  encrypted += cipher.final("hex");
+  const authTag = cipher.getAuthTag().toString("hex");
+
+  return `${iv.toString("hex")}:${authTag}:${encrypted}`;
+}
+
+export function decryptAtRest(encryptedPayload: string, secretKey: string | Buffer): string {
+  if (!encryptedPayload || typeof encryptedPayload !== "string") {
+    return encryptedPayload;
+  }
+
+  const parts = encryptedPayload.split(":");
+  if (parts.length !== 3) {
+    throw new Error("Invalid encrypted format. Expected iv:authTag:ciphertext");
+  }
+
+  const [ivHex, authTagHex, ciphertextHex] = parts;
+  const key = Buffer.isBuffer(secretKey)
+    ? secretKey
+    : crypto.createHash("sha256").update(secretKey).digest();
+
+  const iv = Buffer.from(ivHex, "hex");
+  const authTag = Buffer.from(authTagHex, "hex");
+
+  const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+  decipher.setAuthTag(authTag);
+
+  let decrypted = decipher.update(ciphertextHex, "hex", "utf8");
+  decrypted += decipher.final("utf8");
+
+  return decrypted;
+}
+

@@ -210,4 +210,126 @@ export class AuthController {
       next(err);
     }
   }
+
+  /**
+   * GET /api/auth/me/export (GDPR / Data Protection: Right to Data Portability)
+   */
+  static async exportData(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Authentication required" } });
+        return;
+      }
+
+      const userData = await prisma.user.findUnique({
+        where: { id: userId },
+        include: {
+          studentProfile: true,
+          companyProfile: true,
+          applications: {
+            select: {
+              id: true,
+              internshipId: true,
+              fullName: true,
+              collegeOrUniversity: true,
+              status: true,
+              createdAt: true,
+            },
+          },
+          enrollments: {
+            select: {
+              id: true,
+              cohortId: true,
+              status: true,
+              priceAmount: true,
+              currency: true,
+              createdAt: true,
+            },
+          },
+          payments: {
+            select: {
+              id: true,
+              orderId: true,
+              amount: true,
+              currency: true,
+              status: true,
+              provider: true,
+              createdAt: true,
+            },
+          },
+        },
+      });
+
+      if (!userData) {
+        res.status(404).json({ error: { code: "NOT_FOUND", message: "User not found" } });
+        return;
+      }
+
+      // Strip internal password hashes or sensitive token records
+      const { passwordHash: _, ...exportPayload } = userData as any;
+
+      res.setHeader("Content-Disposition", `attachment; filename="bytehub_data_export_${userId}.json"`);
+      res.status(200).json({
+        exportDate: new Date().toISOString(),
+        compliance: "GDPR / DPDP Right to Data Portability",
+        data: exportPayload,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * DELETE /api/auth/me (GDPR / Data Protection: Right to Erasure / Anonymization)
+   */
+  static async deleteAccount(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Authentication required" } });
+        return;
+      }
+
+      // Anonymize user records and soft-delete
+      await prisma.$transaction(async (tx) => {
+        // 1. Invalidate all active refresh tokens
+        await tx.refreshToken.deleteMany({ where: { userId } });
+
+        // 2. Redact profile PII
+        await tx.studentProfile.deleteMany({ where: { userId } });
+
+        // 3. Anonymize user record
+        await tx.user.update({
+          where: { id: userId },
+          data: {
+            email: `deleted_${userId.slice(0, 8)}@anonymized.local`,
+            name: "Deleted Account",
+            passwordHash: "DELETED_ACCOUNT_SCRUBBED",
+            deletedAt: new Date(),
+          },
+        });
+
+        // 4. Record audit log
+        await tx.auditLog.create({
+          data: {
+            userId,
+            action: "GDPR_RIGHT_TO_ERASURE_PROCESSED",
+            entityType: "USER",
+            entityId: userId,
+            details: { anonymizedAt: new Date().toISOString() },
+          },
+        });
+      });
+
+      res.clearCookie("bh_access_token");
+      res.clearCookie("bh_refresh_token");
+      res.status(200).json({
+        status: "success",
+        message: "Account and personal data successfully anonymized and scheduled for permanent purge.",
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
 }
