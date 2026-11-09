@@ -47,3 +47,4 @@ export class AppError extends Error {
     return new AppError(message, 500, "INTERNAL_SERVER_ERROR");
   }
 }
+

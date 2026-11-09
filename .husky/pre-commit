@@ -5,3 +5,4 @@ echo "[ByteHUB Pre-commit] Running lint-staged, typecheck, and test suite..."
 pnpm lint-staged
 pnpm typecheck
 pnpm test
+

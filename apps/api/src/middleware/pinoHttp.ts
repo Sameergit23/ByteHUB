@@ -25,3 +25,4 @@ export function pinoHttpMiddleware(req: Request, res: Response, next: NextFuncti
 
   next();
 }
+

@@ -22,3 +22,4 @@
   },
   "ignorePatterns": ["dist/**", ".next/**", "node_modules/**", "coverage/**"]
 }
+

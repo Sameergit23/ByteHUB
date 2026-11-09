@@ -34,3 +34,4 @@ export class TrainingService {
 }
 
 export const trainingService = new TrainingService();
+

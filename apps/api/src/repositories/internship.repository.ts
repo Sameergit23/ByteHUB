@@ -56,3 +56,4 @@ export class InternshipRepository {
 }
 
 export const internshipRepository = new InternshipRepository();
+

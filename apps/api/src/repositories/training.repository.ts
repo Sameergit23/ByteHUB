@@ -25,3 +25,4 @@ export class TrainingRepository {
 }
 
 export const trainingRepository = new TrainingRepository();
+
