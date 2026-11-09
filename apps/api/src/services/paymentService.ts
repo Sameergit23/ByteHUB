@@ -378,8 +378,9 @@ export class PaymentService {
     orderId: string;
     razorpayPaymentId: string;
     razorpaySignature: string;
+    requestingUserId?: string;
   }) {
-    const { orderId, razorpayPaymentId, razorpaySignature } = params;
+    const { orderId, razorpayPaymentId, razorpaySignature, requestingUserId } = params;
 
     const isValid = verifyRazorpayPaymentSignature(
       orderId,
@@ -395,6 +396,10 @@ export class PaymentService {
     const payment = await paymentRepository.findByOrderId(orderId);
     if (!payment) {
       throw AppError.notFound("Payment order not found.");
+    }
+
+    if (requestingUserId && payment.userId !== requestingUserId) {
+      throw AppError.forbidden("Access denied: You cannot verify a payment session belonging to another user.");
     }
 
     // Transition from CREATED to PENDING while webhook arrives

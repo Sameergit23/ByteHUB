@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from "express";
+import path from "node:path";
 import { applicationService } from "../services/application.service.js";
 import { AppError } from "../utils/apiError.js";
+import { verifySignedResumeUrl } from "../utils/resumeStorage.js";
 
 export class ApplicationController {
   static async submit(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -94,6 +96,44 @@ export class ApplicationController {
         req.user!.role
       );
       res.status(200).json({ status: "success", data: updated });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async downloadResumeFile(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { key, expires, signature } = req.query;
+      if (typeof key !== "string" || typeof expires !== "string" || typeof signature !== "string") {
+        throw AppError.badRequest("Missing signature, key, or expiry query parameters.");
+      }
+
+      const isValid = verifySignedResumeUrl(key, expires, signature);
+      if (!isValid) {
+        throw AppError.forbidden("Invalid or expired resume download signature.");
+      }
+
+      // Path Traversal Guard: key must strictly resolve inside storage/vault/resumes
+      const normalizedKey = path.normalize(key).replace(/^(\.\.(\/|\\|$))+/, "");
+      if (!normalizedKey.startsWith("resumes/") || normalizedKey.includes("..")) {
+        throw AppError.forbidden("Access denied: Invalid resume path.");
+      }
+
+      const filename = path.basename(normalizedKey);
+      const vaultDir = path.resolve(process.cwd(), "storage/vault/resumes");
+      const targetFile = path.resolve(vaultDir, filename);
+
+      if (!targetFile.startsWith(vaultDir)) {
+        throw AppError.forbidden("Path traversal violation blocked.");
+      }
+
+      const ext = path.extname(filename).toLowerCase();
+      const mimeType = ext === ".pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+      res.setHeader("Content-Type", mimeType);
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.setHeader("Content-Disposition", `inline; filename="resume${ext}"`);
+      res.sendFile(targetFile);
     } catch (err) {
       next(err);
     }

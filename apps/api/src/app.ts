@@ -153,7 +153,7 @@ export const createApp = (): Express => {
   app.use("/api/health", healthRouter);
 
   // 10. Domain API Routes with Tiered Rate Limiting
-  app.use("/api/auth", authRateLimiter, authRouter);
+  app.use("/api/auth", authRouter);
   app.use("/api/internships", internshipsRouter);
   app.use("/api/training", trainingRouter);
   app.use("/api/applications", applicationsRouter);

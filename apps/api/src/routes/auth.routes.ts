@@ -2,6 +2,7 @@ import { Router } from "express";
 import { AuthController } from "../controllers/auth.controller.js";
 import { validateRequest } from "../validators/validate.middleware.js";
 import { authenticateJWT } from "../middleware/auth.js";
+import { authRateLimiter } from "../middleware/rateLimiter.js";
 import {
   SignUpSchema,
   LoginSchema,
@@ -15,12 +16,14 @@ export const authRouter = Router();
 
 authRouter.post(
   "/register",
+  authRateLimiter,
   validateRequest({ body: SignUpSchema }),
   AuthController.register
 );
 
 authRouter.post(
   "/login",
+  authRateLimiter,
   validateRequest({ body: LoginSchema }),
   AuthController.login
 );
@@ -43,18 +46,21 @@ authRouter.get(
 
 authRouter.post(
   "/forgot-password",
+  authRateLimiter,
   validateRequest({ body: ForgotPasswordSchema }),
   AuthController.forgotPassword
 );
 
 authRouter.post(
   "/reset-password",
+  authRateLimiter,
   validateRequest({ body: ResetPasswordSchema }),
   AuthController.resetPassword
 );
 
 authRouter.post(
   "/verify-email/request",
+  authRateLimiter,
   validateRequest({ body: EmailVerificationRequestSchema }),
   AuthController.requestEmailVerification
 );

@@ -324,9 +324,20 @@ adminRouter.get("/audit-logs", async (req: Request, res: Response): Promise<void
 // 9. Server-Side CSV Export (Audit Logged)
 // ---------------------------------------------------------------------------
 
+// Helper: Sanitize fields to prevent CSV Formula Injection (CWE-1236)
+function sanitizeCsvField(field: unknown): string {
+  if (field === null || field === undefined) return '""';
+  let str = String(field);
+  // Neutralize spreadsheet formula execution triggers: =, +, -, @, \t, \r
+  if (/^[=+\-@\t\r]/.test(str)) {
+    str = `'${str}`;
+  }
+  return `"${str.replace(/"/g, '""')}"`;
+}
+
 adminRouter.get("/export/:entity", async (req: Request, res: Response): Promise<void> => {
   const { entity } = req.params;
-  const adminUserId = (req as any).user?.id;
+  const adminUserId = (req as any).user?.id || (req as any).user?.userId;
 
   let csvContent = "";
   let rowCount = 0;
@@ -339,7 +350,13 @@ adminRouter.get("/export/:entity", async (req: Request, res: Response): Promise<
     });
     rowCount = users.length;
     csvContent = "ID,Name,Email,Role,CreatedAt\n" +
-      users.map((u) => `"${u.id}","${u.name}","${u.email}","${u.role}","${u.createdAt.toISOString()}"`).join("\n");
+      users.map((u) => [
+        sanitizeCsvField(u.id),
+        sanitizeCsvField(u.name),
+        sanitizeCsvField(u.email),
+        sanitizeCsvField(u.role),
+        sanitizeCsvField(u.createdAt.toISOString())
+      ].join(",")).join("\n");
   } else if (entity === "payments") {
     const payments = await prisma.payment.findMany({
       include: { user: { select: { email: true } } },
@@ -348,7 +365,16 @@ adminRouter.get("/export/:entity", async (req: Request, res: Response): Promise<
     });
     rowCount = payments.length;
     csvContent = "ID,OrderID,UserEmail,Amount,Currency,Provider,Status,CreatedAt\n" +
-      payments.map((p) => `"${p.id}","${p.orderId}","${p.user?.email || ""}","${p.amount}","${p.currency}","${p.provider}","${p.status}","${p.createdAt.toISOString()}"`).join("\n");
+      payments.map((p) => [
+        sanitizeCsvField(p.id),
+        sanitizeCsvField(p.orderId),
+        sanitizeCsvField(p.user?.email || ""),
+        sanitizeCsvField(p.amount),
+        sanitizeCsvField(p.currency),
+        sanitizeCsvField(p.provider),
+        sanitizeCsvField(p.status),
+        sanitizeCsvField(p.createdAt.toISOString())
+      ].join(",")).join("\n");
   } else if (entity === "enrolments") {
     const enrolments = await prisma.enrollment.findMany({
       include: {
@@ -360,7 +386,15 @@ adminRouter.get("/export/:entity", async (req: Request, res: Response): Promise<
     });
     rowCount = enrolments.length;
     csvContent = "ID,UserEmail,CohortCode,Status,PriceAmount,Currency,CreatedAt\n" +
-      enrolments.map((e) => `"${e.id}","${e.user?.email || ""}","${e.cohort?.cohortCode || ""}","${e.status}","${e.priceAmount}","${e.currency}","${e.createdAt.toISOString()}"`).join("\n");
+      enrolments.map((e) => [
+        sanitizeCsvField(e.id),
+        sanitizeCsvField(e.user?.email || ""),
+        sanitizeCsvField(e.cohort?.cohortCode || ""),
+        sanitizeCsvField(e.status),
+        sanitizeCsvField(e.priceAmount),
+        sanitizeCsvField(e.currency),
+        sanitizeCsvField(e.createdAt.toISOString())
+      ].join(",")).join("\n");
   } else {
     throw AppError.badRequest(`Unknown export entity '${entity}'. Supported: users, payments, enrolments.`);
   }

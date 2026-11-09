@@ -2,12 +2,19 @@ import { Router } from "express";
 import { ApplicationController } from "../controllers/application.controller.js";
 import { validateRequest } from "../validators/validate.middleware.js";
 import { authenticateJWT, requireRoles } from "../middleware/auth.js";
+import { uploadRateLimiter } from "../middleware/rateLimiter.js";
 import {
   CompleteApplicationSchema,
   UpdateApplicationStatusSchema,
 } from "@bytehub/shared";
 
 export const applicationsRouter = Router();
+
+// Secure signed resume download (token-authenticated via HMAC & expiry)
+applicationsRouter.get(
+  "/resume-download",
+  ApplicationController.downloadResumeFile
+);
 
 // Student: Submit application
 applicationsRouter.post(
@@ -41,11 +48,12 @@ applicationsRouter.get(
   ApplicationController.getResume
 );
 
-// Resume upload with magic bytes verification
+// Resume upload with magic bytes verification and rate limiting
 applicationsRouter.post(
   "/upload-resume",
   authenticateJWT,
   requireRoles("STUDENT", "ADMIN"),
+  uploadRateLimiter,
   ApplicationController.uploadResume
 );
 

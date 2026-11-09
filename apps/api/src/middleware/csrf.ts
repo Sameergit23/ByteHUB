@@ -60,14 +60,25 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
   const cookieCsrf = req.cookies?.bh_csrf_token;
   const headerCsrf = req.headers["x-csrf-token"] as string | undefined;
 
-  if (cookieCsrf && headerCsrf) {
+  // If a CSRF/Session cookie is present on a mutating request, the client MUST provide matching X-CSRF-Token
+  if (cookieCsrf) {
+    if (!headerCsrf) {
+      res.status(403).json({
+        error: {
+          code: "CSRF_TOKEN_MISMATCH",
+          message: "CSRF validation token missing in X-CSRF-Token header.",
+        },
+      });
+      return;
+    }
+
     const bufCookie = Buffer.from(cookieCsrf);
     const bufHeader = Buffer.from(headerCsrf);
 
     if (bufCookie.length !== bufHeader.length || !crypto.timingSafeEqual(bufCookie, bufHeader)) {
       res.status(403).json({
         error: {
-          code: "CSRF_TOKEN_INVALID",
+          code: "CSRF_TOKEN_MISMATCH",
           message: "CSRF validation token mismatch.",
         },
       });

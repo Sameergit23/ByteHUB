@@ -2,8 +2,10 @@ export function sanitizeString(val: string): string {
   if (typeof val !== "string") return val;
 
   return val
-    .replace(/\0/g, "")
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
+    .replace(/\0/g, "") // Strip null bytes
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "") // Strip script tags
+    .replace(/on\w+\s*=\s*(?:'[^']*'|"[^"]*"|[^\s>]+)/gi, "") // Neutralize inline event handlers (onload, onerror, etc.)
+    .replace(/javascript:\s*/gi, "") // Neutralize pseudo-protocol
     .trim();
 }
 

@@ -96,11 +96,13 @@ export class PaymentController {
    */
   static async verifyClient(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
+      const userId = (req as any).user?.id || (req as any).user?.userId;
       const { orderId, razorpayPaymentId, razorpaySignature } = req.body;
       const data = await paymentService.verifyClientCheckout({
         orderId,
         razorpayPaymentId,
         razorpaySignature,
+        requestingUserId: userId,
       });
       res.status(200).json({ status: "success", data });
     } catch (err) {

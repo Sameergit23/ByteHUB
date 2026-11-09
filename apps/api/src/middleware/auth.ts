@@ -5,6 +5,7 @@ import { UserRole } from "@bytehub/shared";
 import { prisma } from "../lib/prisma.js";
 
 export interface AuthenticatedUser {
+  id: string;
   userId: string;
   email: string;
   role: UserRole;
@@ -69,8 +70,13 @@ export const authenticateJWT = (
   }
 
   try {
-    const decoded = jwt.verify(token, env.JWT_SECRET) as AuthenticatedUser;
-    req.user = decoded;
+    const decoded = jwt.verify(token, env.JWT_SECRET) as any;
+    const uid = decoded.userId || decoded.id;
+    req.user = {
+      ...decoded,
+      userId: uid,
+      id: uid,
+    };
     next();
   } catch {
     res.status(401).json({
@@ -85,7 +91,9 @@ export const authenticateJWT = (
 /**
  * Role-Based Access Control (RBAC) middleware
  */
-export const requireRoles = (...roles: UserRole[]) => {
+export const requireRoles = (...roles: (UserRole | UserRole[])[]) => {
+  const allowedRoles = roles.flat();
+
   return (req: Request, res: Response, next: NextFunction): void => {
     if (!req.user) {
       res.status(401).json({
@@ -97,11 +105,11 @@ export const requireRoles = (...roles: UserRole[]) => {
       return;
     }
 
-    if (!roles.includes(req.user.role)) {
+    if (!allowedRoles.includes(req.user.role)) {
       res.status(403).json({
         error: {
           code: "FORBIDDEN_ROLE",
-          message: `Access denied. Requires one of the following permissions: [${roles.join(", ")}].`,
+          message: `Access denied. Requires one of the following permissions: [${allowedRoles.join(", ")}].`,
         },
       });
       return;
@@ -110,6 +118,8 @@ export const requireRoles = (...roles: UserRole[]) => {
     next();
   };
 };
+
+export const requireRole = requireRoles;
 
 /**
  * Resource-Level Authorization (IDOR Prevention)

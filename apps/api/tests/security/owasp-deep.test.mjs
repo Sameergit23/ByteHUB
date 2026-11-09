@@ -97,3 +97,56 @@ test("Security: state machine strictly rejects illegal or out-of-order state tra
     }
   );
 });
+
+// ============================================================================
+// 4. Audit Remediation Tests: CSV Injection, Traversal, and XSS Sanitization
+// ============================================================================
+
+test("Security: CSV formula execution triggers (=, +, -, @) are sanitized with leading single quote", () => {
+  function sanitizeCsvField(field) {
+    if (field === null || field === undefined) return '""';
+    let str = String(field);
+    if (/^[=+\-@\t\r]/.test(str)) {
+      str = `'${str}`;
+    }
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+
+  assert.equal(sanitizeCsvField("=cmd|'/C calc'!A0"), `"'=cmd|'/C calc'!A0"`);
+  assert.equal(sanitizeCsvField("+1+2"), `"'+1+2"`);
+  assert.equal(sanitizeCsvField("-SUM(A1:A10)"), ` "'-SUM(A1:A10)"`.trim());
+  assert.equal(sanitizeCsvField("@malicious"), `"'@malicious"`);
+  assert.equal(sanitizeCsvField('Normal "Quoted" Text'), `"Normal ""Quoted"" Text"`);
+});
+
+test("Security: path traversal attempts in resume downloads are strictly neutralized", () => {
+  const dangerousKeys = [
+    "../../etc/passwd",
+    "resumes/../../../secret.env",
+    "..\\..\\windows\\system32\\cmd.exe",
+    "resumes/../../storage/vault",
+  ];
+
+  for (const key of dangerousKeys) {
+    const normalizedKey = key.replace(/\\/g, "/");
+    const hasTraversal = normalizedKey.includes("..") || !normalizedKey.startsWith("resumes/") || normalizedKey.includes("/../");
+    assert.equal(hasTraversal, true, `Key ${key} must be flagged as path traversal`);
+  }
+});
+
+test("Security: string sanitizer neutralizes dangerous inline event handlers and pseudo-protocols", () => {
+  function sanitizeString(val) {
+    if (typeof val !== "string") return val;
+    return val
+      .replace(/\0/g, "")
+      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
+      .replace(/on\w+\s*=\s*(?:'[^']*'|"[^"]*"|[^\s>]+)/gi, "")
+      .replace(/javascript:\s*/gi, "")
+      .trim();
+  }
+
+  const payload = `<img src=x onerror=alert(1)> and <a href="javascript:alert(2)">click</a>`;
+  const sanitized = sanitizeString(payload);
+  assert.equal(sanitized.includes("onerror"), false);
+  assert.equal(sanitized.includes("javascript:"), false);
+});

@@ -1,6 +1,6 @@
 import { Router, raw } from "express";
 import { PaymentController } from "../controllers/payment.controller.js";
-import { authenticateJWT, requireRole } from "../middleware/auth.js";
+import { authenticateJWT, requireRoles } from "../middleware/auth.js";
 
 export const paymentsRouter = Router();
 
@@ -55,13 +55,13 @@ paymentsRouter.get(
 paymentsRouter.post(
   "/refund",
   authenticateJWT,
-  requireRole(["ADMIN"]),
+  requireRoles("ADMIN"),
   PaymentController.refund
 );
 
 paymentsRouter.post(
   "/jobs/reconcile",
   authenticateJWT,
-  requireRole(["ADMIN"]),
+  requireRoles("ADMIN"),
   PaymentController.reconcile
 );
