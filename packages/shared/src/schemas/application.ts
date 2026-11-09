@@ -82,3 +82,4 @@ export const UpdateApplicationStatusSchema = z.object({
   feedbackNote: z.string().max(1000).optional(),
 });
 export type UpdateApplicationStatusInput = z.infer<typeof UpdateApplicationStatusSchema>;
+

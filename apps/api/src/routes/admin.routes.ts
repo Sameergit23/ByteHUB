@@ -90,3 +90,4 @@ adminRouter.get("/users", async (_req: Request, res: Response): Promise<void> =>
     data: users,
   });
 });
+

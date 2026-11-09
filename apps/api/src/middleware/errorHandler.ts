@@ -1,28 +1,66 @@
 import { Request, Response, NextFunction } from "express";
+import { ZodError } from "zod";
+import { AppError } from "../utils/apiError.js";
+import { logger } from "../utils/logger.js";
 
-export interface AppError extends Error {
-  statusCode?: number;
-  code?: string;
-}
-
-export const errorHandler = (
-  err: AppError,
-  _req: Request,
+export function errorHandler(
+  err: Error,
+  req: Request,
   res: Response,
   _next: NextFunction
-): void => {
-  const statusCode = err.statusCode || 500;
-  const message = err.message || "Internal server error";
-  const code = err.code || "INTERNAL_ERROR";
+): void {
+  const isProduction = process.env.NODE_ENV === "production";
+  const requestId = req.id || "unknown";
 
-  if (process.env.NODE_ENV !== "test") {
-    console.error(`[API ERROR] ${code}: ${message}`, err.stack);
+  // 1. Zod Validation Errors
+  if (err instanceof ZodError) {
+    const formatted = err.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join(", ");
+    logger.warn({ requestId, err: formatted }, "Validation Error");
+
+    res.status(400).json({
+      error: {
+        code: "VALIDATION_ERROR",
+        message: formatted,
+      },
+    });
+    return;
   }
 
-  res.status(statusCode).json({
-    status: "error",
-    code,
-    message,
-    ...(process.env.NODE_ENV === "development" ? { stack: err.stack } : {}),
+  // 2. Custom Application Errors
+  if (err instanceof AppError) {
+    logger.warn(
+      {
+        requestId,
+        code: err.code,
+        statusCode: err.statusCode,
+        message: err.message,
+      },
+      "Application Error"
+    );
+
+    res.status(err.statusCode).json({
+      error: {
+        code: err.code,
+        message: err.message,
+      },
+    });
+    return;
+  }
+
+  // 3. Unhandled Server Errors
+  logger.error(
+    {
+      requestId,
+      message: err.message,
+      stack: isProduction ? undefined : err.stack,
+    },
+    "Unhandled Internal Server Error"
+  );
+
+  res.status(500).json({
+    error: {
+      code: "INTERNAL_SERVER_ERROR",
+      message: isProduction ? "An unexpected server error occurred" : err.message,
+    },
   });
-};
+}

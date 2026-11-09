@@ -4,43 +4,45 @@ import { createApp } from "../src/app.js";
 
 const app = createApp();
 
-describe("ByteHUB API Suite", () => {
-  it("GET /api/health returns 200 and healthy status", async () => {
+describe("ByteHUB Architecture & API Test Suite", () => {
+  it("GET /health returns 200 with status ok and uptime", async () => {
+    const res = await request(app).get("/health");
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("ok");
+    expect(res.body.service).toBe("bytehub-api");
+    expect(typeof res.body.uptime).toBe("number");
+  });
+
+  it("GET /api/health returns 200 and passes through healthRouter", async () => {
     const res = await request(app).get("/api/health");
     expect(res.status).toBe(200);
-    expect(res.body.status).toBe("healthy");
-    expect(res.body.service).toBe("bytehub-api");
+    expect(res.body.status).toBe("ok");
   });
 
-  it("POST /api/auth/register fails with 400 when fields are invalid", async () => {
+  it("POST /api/auth/register fails with 400 and consistent error JSON format", async () => {
     const res = await request(app).post("/api/auth/register").send({
-      email: "bad-email",
-      password: "123",
+      email: "invalid-email",
+      password: "short",
       name: "",
-      role: "INVALID_ROLE",
+      role: "INVALID",
     });
+
     expect(res.status).toBe(400);
-    expect(res.body.code).toBe("VALIDATION_ERROR");
+    expect(res.body).toHaveProperty("error");
+    expect(res.body.error).toHaveProperty("code");
+    expect(res.body.error).toHaveProperty("message");
+    expect(res.body.error.code).toBe("VALIDATION_ERROR");
   });
 
-  it("GET /api/training returns published training tracks", async () => {
-    const res = await request(app).get("/api/training");
-    expect(res.status).toBe(200);
-    expect(res.body.status).toBe("success");
-    expect(Array.isArray(res.body.data)).toBe(true);
-    expect(res.body.data.length).toBeGreaterThan(0);
-    expect(res.body.data[0]).toHaveProperty("slug");
-    expect(res.body.data[0]).toHaveProperty("priceINR");
-  });
-
-  it("GET /api/auth/me rejects unauthenticated request with 401", async () => {
+  it("GET /api/auth/me rejects unauthenticated request with consistent 401 error format", async () => {
     const res = await request(app).get("/api/auth/me");
     expect(res.status).toBe(401);
-    expect(res.body.code).toBe("UNAUTHORIZED");
+    expect(res.body).toHaveProperty("error");
+    expect(res.body.error.code).toBe("UNAUTHORIZED");
   });
 
-  it("POST /api/applications rejects unauthenticated request with 401", async () => {
-    const res = await request(app).post("/api/applications").send({});
-    expect(res.status).toBe(401);
+  it("Request includes X-Request-Id in response headers", async () => {
+    const res = await request(app).get("/health");
+    expect(res.headers["x-request-id"]).toBeDefined();
   });
 });

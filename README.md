@@ -135,3 +135,4 @@ npm run build
 - **Server Validation:** Every mutation route validates against Zod schemas; client is never trusted.
 - **ACID Transactions:** Payments, seat decrements, and student enrollments commit atomically in `prisma.$transaction`.
 - **Zero Secrets in Code:** Environment secrets strictly parsed via `env.ts`.
+

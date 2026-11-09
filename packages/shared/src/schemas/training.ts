@@ -39,3 +39,4 @@ export const EnrollTrainingSchema = z.object({
   currency: z.enum(["INR", "USD"]),
 });
 export type EnrollTrainingInput = z.infer<typeof EnrollTrainingSchema>;
+

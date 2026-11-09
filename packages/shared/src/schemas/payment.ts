@@ -46,3 +46,4 @@ export const PaymentRecordSchema = z.object({
   createdAt: z.string(),
 });
 export type PaymentRecord = z.infer<typeof PaymentRecordSchema>;
+

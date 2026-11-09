@@ -34,3 +34,4 @@ export const InternshipFilterSchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).default(10),
 });
 export type InternshipFilter = z.infer<typeof InternshipFilterSchema>;
+

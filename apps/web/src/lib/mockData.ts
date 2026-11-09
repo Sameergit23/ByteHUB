@@ -273,3 +273,4 @@ export const MOCK_TRAINING_PROGRAMS: TrainingProgramItem[] = [
     tools: ["Kubernetes", "Docker", "Terraform", "GitHub Actions", "Grafana", "AWS"],
   },
 ];
+

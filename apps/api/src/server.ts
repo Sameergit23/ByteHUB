@@ -1,19 +1,23 @@
 import { createApp } from "./app.js";
 import { env } from "./config/env.js";
+import { logger } from "./utils/logger.js";
 
 const app = createApp();
 
 const server = app.listen(env.PORT, () => {
-  console.log(`[ByteHUB API] Server running on port ${env.PORT} in ${env.NODE_ENV} mode`);
+  logger.info(
+    { port: env.PORT, env: env.NODE_ENV },
+    `[ByteHUB API] Server running on http://localhost:${env.PORT}`
+  );
 });
 
-const gracefulShutdown = () => {
-  console.log("[ByteHUB API] Received termination signal, closing HTTP server...");
+const gracefulShutdown = (signal: string) => {
+  logger.info({ signal }, "[ByteHUB API] Shutdown signal received. Closing HTTP server...");
   server.close(() => {
-    console.log("[ByteHUB API] HTTP server closed gracefully");
+    logger.info("[ByteHUB API] HTTP server closed gracefully");
     process.exit(0);
   });
 };
 
-process.on("SIGTERM", gracefulShutdown);
-process.on("SIGINT", gracefulShutdown);
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));

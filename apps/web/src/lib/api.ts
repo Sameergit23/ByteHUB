@@ -74,3 +74,4 @@ export async function apiFetch<T>(
 
   return data;
 }
+
