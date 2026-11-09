@@ -17,6 +17,10 @@ const EnvSchema = z.object({
   STRIPE_PUBLISHABLE_KEY: z.string().default("pk_test_placeholder_publishable_key"),
   STRIPE_WEBHOOK_SECRET: z.string().min(1, "STRIPE_WEBHOOK_SECRET is required"),
   FRONTEND_URL: z.string().url("FRONTEND_URL must be a valid URL").default("http://localhost:3000"),
+  EMAIL_PROVIDER: z.enum(["RESEND", "SES", "SENDGRID", "MOCK"]).default("MOCK"),
+  EMAIL_FROM: z.string().default("ByteHUB Admissions <admissions@bytehub.dev>"),
+  RESEND_API_KEY: z.string().default("re_test_mock_api_key"),
+  REDIS_URL: z.string().optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

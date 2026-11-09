@@ -338,3 +338,47 @@ npm run build
 - **ACID Transactions:** Payments, seat decrements, and student enrollments commit atomically in `prisma.$transaction`.
 - **Zero Secrets in Code:** Environment secrets strictly parsed via `env.ts`.
 
+
+---
+
+## 6. Email Deliverability & Domain Authentication (SPF, DKIM, DMARC)
+
+To guarantee that transactional emails (tax receipts, password resets, enrolment confirmations, and application updates) land in student inboxes and never in spam folders, the sending domain must be configured with SPF, DKIM, and DMARC DNS records.
+
+### 1. Sender Policy Framework (SPF)
+Add a `TXT` record on your apex domain (`bytehub.dev`):
+```dns
+Type:  TXT
+Host:  @
+Value: v=spf1 include:resend.com ~all
+```
+*(If using Amazon SES, substitute `include:amazonses.com ~all`; if SendGrid, `include:sendgrid.net ~all`)*
+
+### 2. DomainKeys Identified Mail (DKIM)
+DKIM signs outgoing emails with a 2048-bit cryptographic key, proving they were not altered in transit.
+Add the `CNAME` records provided by your email provider:
+```dns
+Type:  CNAME
+Host:  resend._domainkey.bytehub.dev
+Value: dkim.resend.com
+
+Type:  CNAME
+Host:  resend2._domainkey.bytehub.dev
+Value: dkim2.resend.com
+```
+
+### 3. Domain-based Message Authentication, Reporting & Conformance (DMARC)
+DMARC instructs receiving mail servers (Google Workspace, Outlook 365, Apple Mail) how to handle messages that fail SPF or DKIM alignment, and reports spoofing attempts back to ByteHUB.
+Add a `TXT` record under the `_dmarc` subdomain:
+```dns
+Type:  TXT
+Host:  _dmarc.bytehub.dev
+Value: v=DMARC1; p=quarantine; rua=mailto:dmarc-reports@bytehub.dev; ruf=mailto:dmarc-forensics@bytehub.dev; pct=100; sp=reject; aspf=r; adkim=r
+```
+- `p=quarantine`: Delivers failing emails to spam while warming up domain reputation; transition to `p=reject` after 30 days of clean alignment.
+- `aspf=r` & `adkim=r`: Relaxed alignment allowing subdomains (e.g., `mail.bytehub.dev` or `admissions@bytehub.dev`).
+- `rua`: Aggregate XML reporting URI for deliverability monitoring.
+
+### 4. Unsubscribe Handling (RFC 8058 & CAN-SPAM / GDPR Compliance)
+- **Essential Transactional Emails** (Password resets, payment receipts, cohort confirmations, verification links) are non-promotional and exempt from mandatory unsubscribe links under CAN-SPAM and GDPR. They strictly omit unsubscribe links to guarantee critical delivery.
+- **Non-Essential Digests** (Weekly role alerts, tech digests) include both visible footer unsubscribe links and RFC 8058 compliant `List-Unsubscribe: <https://bytehub.dev/api/auth/unsubscribe?token=...>` headers enabling one-click unsubscribe in mail clients.

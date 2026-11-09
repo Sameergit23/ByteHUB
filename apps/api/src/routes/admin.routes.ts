@@ -387,3 +387,33 @@ adminRouter.get("/export/:entity", async (req: Request, res: Response): Promise<
   );
   res.status(200).send(csvContent);
 });
+
+// ---------------------------------------------------------------------------
+// 10. BullMQ / Job Queue & Dead-Letter Queue (DLQ) Management
+// ---------------------------------------------------------------------------
+
+adminRouter.get("/jobs/failed", async (_req: Request, res: Response): Promise<void> => {
+  const { jobQueue } = await import("../jobs/queue.js");
+  const failedJobs = jobQueue.getFailedJobs();
+  res.status(200).json({ status: "success", data: failedJobs });
+});
+
+adminRouter.post("/jobs/retry/:jobId", async (req: Request, res: Response): Promise<void> => {
+  const { jobQueue } = await import("../jobs/queue.js");
+  const { jobId } = req.params;
+  try {
+    const job = await jobQueue.retryJob(jobId);
+    res.status(200).json({
+      status: "success",
+      message: `Job '${jobId}' re-queued from Dead-Letter Queue.`,
+      data: job,
+    });
+  } catch (err: any) {
+    res.status(404).json({ error: { code: "JOB_NOT_FOUND", message: err.message } });
+  }
+});
+
+adminRouter.get("/jobs/stats", async (_req: Request, res: Response): Promise<void> => {
+  const { jobQueue } = await import("../jobs/queue.js");
+  res.status(200).json({ status: "success", data: jobQueue.getStats() });
+});

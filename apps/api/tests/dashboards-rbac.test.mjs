@@ -117,3 +117,4 @@ test("Mobile Layout Rule: Table stacking and status text labels", () => {
   const mobileViewportWidth = 360;
   assert.ok(mobileViewportWidth >= 320, "Mobile layout supports standard compact viewports");
 });
+

@@ -31,3 +31,4 @@ jobs:
       - name: Run Native Test Runner
         run: |
           node --test apps/api/tests/auth-security.test.mjs apps/api/tests/applications.test.mjs apps/api/tests/payments-security.test.mjs apps/api/tests/dashboards-rbac.test.mjs
+

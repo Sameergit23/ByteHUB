@@ -46,3 +46,4 @@ If you discover a security vulnerability in ByteHUB, please report it privately:
 - **Right to Data Portability**: `GET /api/auth/me/export` delivers machine-readable JSON exports.
 - **Right to Erasure**: `DELETE /api/auth/me` anonymizes PII and purges tokens.
 - **Cookie Consent**: Explicit banner for essential and optional analytics cookies.
+
