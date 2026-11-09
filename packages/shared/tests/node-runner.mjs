@@ -55,6 +55,7 @@ test("CompleteApplicationSchema: validates 4-step internship application", () =>
     fullName: "Maya Sen",
     email: "maya.sen@domain.edu",
     phone: "+91 9876543210",
+    location: "Bangalore, India",
     collegeOrUniversity: "Indian Institute of Technology",
     graduationYear: 2026,
     degree: "B.Tech Computer Science",
