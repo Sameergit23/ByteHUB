@@ -12,11 +12,12 @@ export const CreateInternshipSchema = z.object({
   currency: z.enum(["INR", "USD"]).default("INR"),
   durationMonths: z.number().int().min(1).max(24),
   description: z.string().trim().min(50, "Description must be at least 50 characters"),
+  whatYouWillDo: z.array(z.string().trim()).default([]),
   requirements: z.array(z.string().trim().min(2)).min(1, "At least one requirement is needed"),
-  perks: z.array(z.string().trim()).default([]),
+  skills: z.array(z.string().trim().min(1)).min(1, "At least one skill required"),
   openings: z.number().int().min(1).default(1),
   deadline: z.string().datetime("Must be a valid ISO date-time"),
-  skills: z.array(z.string().trim().min(1)).min(1, "At least one skill required"),
+  trackId: z.string().optional(),
 });
 export type CreateInternshipInput = z.infer<typeof CreateInternshipSchema>;
 
@@ -30,8 +31,9 @@ export const InternshipFilterSchema = z.object({
   type: InternshipTypeSchema.optional(),
   minStipend: z.coerce.number().optional(),
   skill: z.string().optional(),
+  trackId: z.string().optional(),
+  cursor: z.string().optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(50).default(10),
 });
 export type InternshipFilter = z.infer<typeof InternshipFilterSchema>;
-

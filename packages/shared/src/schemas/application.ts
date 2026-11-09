@@ -1,79 +1,90 @@
 import { z } from "zod";
 
-export const ApplicationStep1Schema = z.object({
-  fullName: z.string().trim().min(2, "Full name is required").max(100),
-  email: z.string().trim().email("Valid email is required"),
+// Step 1: Personal Details
+export const ApplicationDetailsSchema = z.object({
+  fullName: z.string().trim().min(2, "Full name must be at least 2 characters").max(100),
+  email: z.string().trim().email("Valid email address is required"),
   phone: z
     .string()
     .trim()
     .regex(/^[+0-9\s-]{8,20}$/, "Valid phone number required"),
-  collegeOrUniversity: z.string().trim().min(2, "College/University is required").max(150),
+  location: z.string().trim().min(2, "City or country of residence required").max(100),
+});
+export type ApplicationDetailsInput = z.infer<typeof ApplicationDetailsSchema>;
+
+// Step 2: Education & Experience
+export const ApplicationEducationSchema = z.object({
+  collegeOrUniversity: z.string().trim().min(2, "College/University name required").max(150),
   graduationYear: z.coerce
     .number()
     .int()
     .min(2020)
-    .max(2032, "Invalid graduation year"),
-  degree: z.string().trim().min(2, "Degree name required").max(80),
-});
-export type ApplicationStep1Input = z.infer<typeof ApplicationStep1Schema>;
-
-export const ApplicationStep2Schema = z.object({
+    .max(2035, "Valid graduation year required"),
+  degree: z.string().trim().min(2, "Degree / Program name required").max(100),
   githubUrl: z
     .string()
     .trim()
     .url("Valid GitHub URL required")
-    .regex(/github\.com/, "Must be a github.com URL"),
+    .regex(/github\.com/, "Must be a github.com profile link"),
   linkedinUrl: z
     .string()
     .trim()
     .url("Valid LinkedIn URL required")
-    .regex(/linkedin\.com/, "Must be a linkedin.com URL"),
+    .regex(/linkedin\.com/, "Must be a linkedin.com profile link"),
   portfolioUrl: z.string().trim().url("Valid URL").or(z.literal("")).optional(),
-  resumeUrl: z.string().trim().url("Valid public or hosted resume URL required"),
-  bioSummary: z.string().trim().min(20, "Brief summary must be at least 20 characters").max(600),
 });
-export type ApplicationStep2Input = z.infer<typeof ApplicationStep2Schema>;
+export type ApplicationEducationInput = z.infer<typeof ApplicationEducationSchema>;
 
-export const ApplicationStep3Schema = z.object({
+// Step 3: Resume & Statement
+export const ApplicationResumeSchema = z.object({
+  resumeUrl: z.string().trim().min(1, "Resume file must be uploaded (PDF or DOCX, max 5 MB)"),
+  bioSummary: z
+    .string()
+    .trim()
+    .min(20, "Brief summary must be at least 20 characters")
+    .max(800),
   whyInterested: z
     .string()
     .trim()
-    .min(50, "Please provide at least 50 characters explaining your interest")
+    .min(30, "Please provide at least 30 characters explaining your interest")
     .max(1500),
   relevantProjectDescription: z
     .string()
     .trim()
-    .min(50, "Please describe a relevant project in at least 50 characters")
+    .min(50, "Please describe a technical project in at least 50 characters")
     .max(2000),
+});
+export type ApplicationResumeInput = z.infer<typeof ApplicationResumeSchema>;
+
+// Step 4: Availability, Terms & Review
+export const ApplicationReviewSchema = z.object({
   availableHoursPerWeek: z.coerce.number().int().min(10).max(60),
   earliestStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Format YYYY-MM-DD required"),
-});
-export type ApplicationStep3Input = z.infer<typeof ApplicationStep3Schema>;
-
-export const ApplicationStep4Schema = z.object({
   termsAccepted: z.literal(true, {
-    errorMap: () => ({ message: "You must accept the terms & conditions" }),
+    errorMap: () => ({ message: "You must accept ByteHUB terms & code of conduct" }),
   }),
   accurateInformationAcknowledged: z.literal(true, {
-    errorMap: () => ({ message: "You must confirm that all details are accurate" }),
+    errorMap: () => ({ message: "You must verify that all details provided are accurate" }),
   }),
 });
-export type ApplicationStep4Input = z.infer<typeof ApplicationStep4Schema>;
+export type ApplicationReviewInput = z.infer<typeof ApplicationReviewSchema>;
 
-export const CompleteApplicationSchema = ApplicationStep1Schema.merge(ApplicationStep2Schema)
-  .merge(ApplicationStep3Schema)
-  .merge(ApplicationStep4Schema)
+// Complete Unified Application Schema
+export const CompleteApplicationSchema = ApplicationDetailsSchema.merge(ApplicationEducationSchema)
+  .merge(ApplicationResumeSchema)
+  .merge(ApplicationReviewSchema)
   .extend({
-    internshipId: z.string().min(1, "Internship ID required"),
+    internshipId: z.string().min(1, "Internship identifier is required"),
   });
 export type CompleteApplicationInput = z.infer<typeof CompleteApplicationSchema>;
 
 export const ApplicationStatusSchema = z.enum([
   "SUBMITTED",
   "UNDER_REVIEW",
-  "SHORTLISTED",
+  "INTERVIEW",
+  "OFFERED",
   "REJECTED",
-  "ACCEPTED",
+  "WITHDRAWN",
 ]);
 export type ApplicationStatus = z.infer<typeof ApplicationStatusSchema>;
 
@@ -82,4 +93,3 @@ export const UpdateApplicationStatusSchema = z.object({
   feedbackNote: z.string().max(1000).optional(),
 });
 export type UpdateApplicationStatusInput = z.infer<typeof UpdateApplicationStatusSchema>;
-

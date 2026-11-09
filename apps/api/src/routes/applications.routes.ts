@@ -9,6 +9,7 @@ import {
 
 export const applicationsRouter = Router();
 
+// Student: Submit application
 applicationsRouter.post(
   "/",
   authenticateJWT,
@@ -17,12 +18,38 @@ applicationsRouter.post(
   ApplicationController.submit
 );
 
+// Student: List my submitted applications
 applicationsRouter.get(
   "/my",
   authenticateJWT,
+  requireRoles("STUDENT", "ADMIN"),
   ApplicationController.getMyApplications
 );
 
+// Student: Withdraw application
+applicationsRouter.post(
+  "/:id/withdraw",
+  authenticateJWT,
+  requireRoles("STUDENT", "ADMIN"),
+  ApplicationController.withdraw
+);
+
+// Student, Company, Admin: Download / view resume (guarded against IDOR)
+applicationsRouter.get(
+  "/:id/resume",
+  authenticateJWT,
+  ApplicationController.getResume
+);
+
+// Resume upload with magic bytes verification
+applicationsRouter.post(
+  "/upload-resume",
+  authenticateJWT,
+  requireRoles("STUDENT", "ADMIN"),
+  ApplicationController.uploadResume
+);
+
+// Company & Admin: Review candidate applications for a specific posting
 applicationsRouter.get(
   "/internship/:internshipId",
   authenticateJWT,
@@ -30,6 +57,7 @@ applicationsRouter.get(
   ApplicationController.getInternshipApplications
 );
 
+// Company & Admin: Update candidate pipeline stage
 applicationsRouter.patch(
   "/:id/status",
   authenticateJWT,
