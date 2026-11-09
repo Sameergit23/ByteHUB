@@ -1,13 +1,8 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --font-inter: 'Inter', sans-serif;
-  --font-space-grotesk: 'Space Grotesk', sans-serif;
-  --font-space-mono: 'Space Mono', monospace;
   --canvas: #F5F2EA;
   --ink: #16150F;
   --accent: #B8341A;
@@ -23,7 +18,7 @@
 html {
   background-color: #F5F2EA;
   color: #16150F;
-  font-family: var(--font-inter);
+  font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -34,25 +29,31 @@ body {
   margin: 0;
   padding: 0;
   min-height: 100vh;
+  overflow-x: hidden;
 }
 
 /* WCAG 2.2 AA Focus Indicators */
 :focus-visible {
-  outline: 2px solid #16150F;
-  outline-offset: 2px;
+  outline: 2px solid #16150F !important;
+  outline-offset: 2px !important;
 }
 
-/* Editorial selection */
-::selection {
-  background-color: #16150F;
-  color: #F5F2EA;
+/* Reduced Motion Support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
-/* Table rules and typographic borders */
-.editorial-grid {
-  background-size: 32px 32px;
-  background-image: 
-    linear-gradient(to right, rgba(216, 211, 196, 0.4) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(216, 211, 196, 0.4) 1px, transparent 1px);
+/* Form element base */
+input,
+select,
+textarea,
+button {
+  font-family: inherit;
 }
-
