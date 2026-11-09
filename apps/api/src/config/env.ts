@@ -21,6 +21,14 @@ const EnvSchema = z.object({
   EMAIL_FROM: z.string().default("ByteHUB Admissions <admissions@bytehub.dev>"),
   RESEND_API_KEY: z.string().default("re_test_mock_api_key"),
   REDIS_URL: z.string().optional(),
+  SENTRY_DSN: z.string().optional(),
+  ALERT_WEBHOOK_URL: z.string().optional(),
+  STORAGE_DRIVER: z.enum(["local", "s3", "minio"]).default("local"),
+  S3_BUCKET_NAME: z.string().default("bytehub-resumes"),
+  S3_REGION: z.string().default("ap-south-1"),
+  S3_ENDPOINT: z.string().optional(),
+  CDN_URL: z.string().optional(),
+  APP_VERSION: z.string().default("1.0.0"),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

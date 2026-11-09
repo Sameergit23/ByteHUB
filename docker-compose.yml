@@ -1,0 +1,172 @@
+version: "3.8"
+
+services:
+  # ----------------------------------------------------------------------------
+  # 1. Primary PostgreSQL Database (ACID Transactions)
+  # ----------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: bytehub-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-bytehub_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bytehub_secure_local_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-bytehub_dev}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bytehub_user} -d ${POSTGRES_DB:-bytehub_dev}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - bytehub-network
+
+  # ----------------------------------------------------------------------------
+  # 2. Redis Cache & Job Queue (BullMQ + Rate Limiting)
+  # ----------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: bytehub-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:-bytehub_redis_pass}"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-bytehub_redis_pass}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bytehub-network
+
+  # ----------------------------------------------------------------------------
+  # 3. MinIO (S3-Compatible Private Resume Storage Bucket Emulator)
+  # ----------------------------------------------------------------------------
+  minio:
+    image: minio/minio:RELEASE.2024-01-18T22-51-28Z
+    container_name: bytehub-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-bytehub_minio_admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-bytehub_minio_secret_key}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    networks:
+      - bytehub-network
+
+  # Helper: Ensure private bucket bytehub-resumes exists on start
+  minio-init:
+    image: minio/mc:RELEASE.2024-01-18T22-53-58Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc alias set localminio http://minio:9000 ${MINIO_ROOT_USER:-bytehub_minio_admin} ${MINIO_ROOT_PASSWORD:-bytehub_minio_secret_key};
+      /usr/bin/mc mb --ignore-existing localminio/bytehub-resumes;
+      /usr/bin/mc anonymous set none localminio/bytehub-resumes;
+      exit 0;
+      "
+    networks:
+      - bytehub-network
+
+  # ----------------------------------------------------------------------------
+  # 4. Backend Express API
+  # ----------------------------------------------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: bytehub-api
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      NODE_ENV: development
+      PORT: 5000
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-bytehub_user}:${POSTGRES_PASSWORD:-bytehub_secure_local_dev_password}@postgres:5432/${POSTGRES_DB:-bytehub_dev}?schema=public"
+      JWT_SECRET: ${JWT_SECRET:-bytehub_local_development_jwt_secret_key_minimum_32_chars!}
+      JWT_EXPIRES_IN: "7d"
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-rzp_test_placeholder_key}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-rzp_test_placeholder_secret}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-rzp_webhook_secret_placeholder}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-sk_test_placeholder_secret_key}
+      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-pk_test_placeholder_publishable_key}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-whsec_placeholder_webhook_signing_secret}
+      FRONTEND_URL: "http://localhost:3000"
+      REDIS_URL: "redis://:${REDIS_PASSWORD:-bytehub_redis_pass}@redis:6379"
+      STORAGE_DRIVER: "minio"
+      S3_ENDPOINT: "http://minio:9000"
+      S3_BUCKET_NAME: "bytehub-resumes"
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-bytehub_minio_admin}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-bytehub_minio_secret_key}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    networks:
+      - bytehub-network
+
+  # ----------------------------------------------------------------------------
+  # 5. Frontend Next.js Web Application
+  # ----------------------------------------------------------------------------
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: bytehub-web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      NEXT_PUBLIC_API_URL: "http://localhost:5000/api"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+    networks:
+      - bytehub-network
+
+# ------------------------------------------------------------------------------
+# Persistent Volumes & Private Network
+# ------------------------------------------------------------------------------
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  minio_data:
+    driver: local
+
+networks:
+  bytehub-network:
+    driver: bridge

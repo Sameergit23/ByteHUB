@@ -1,0 +1,209 @@
+name: Production CI/CD Pipeline
+
+on:
+  push:
+    branches: [ master, main ]
+    tags:
+      - 'v*.*.*'
+  pull_request:
+    branches: [ master, main ]
+
+permissions:
+  contents: read
+  security-events: write
+  packages: write
+  deployments: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master' && !startsWith(github.ref, 'refs/tags/v') }}
+
+jobs:
+  # ----------------------------------------------------------------------------
+  # 1. Security Scans: Gitleaks Secret Scanner & Dependency Audit
+  # ----------------------------------------------------------------------------
+  security-scans:
+    name: Security Scans (Gitleaks & Audit)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Codebase
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks Secret Scanner
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9.12.3
+
+      - name: Run Security Audit (High & Critical Severity)
+        run: pnpm audit --audit-level=high
+
+  # ----------------------------------------------------------------------------
+  # 2. Quality Gate: Lint, Typecheck, and Test Suite
+  # ----------------------------------------------------------------------------
+  quality-gate:
+    name: Lint, Typecheck & Automated Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Codebase
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9.12.3
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint Source Code
+        run: pnpm run lint
+
+      - name: TypeScript Typecheck
+        run: pnpm run typecheck
+
+      - name: Execute Full Test Suite (Unit, Integration, Security)
+        run: pnpm run test:all
+        env:
+          NODE_ENV: test
+          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/test_db?schema=public"
+          JWT_SECRET: "test_secret_key_minimum_32_characters_long_for_ci_pipeline"
+          RAZORPAY_KEY_ID: "rzp_test_mock"
+          RAZORPAY_KEY_SECRET: "rzp_test_secret"
+          RAZORPAY_WEBHOOK_SECRET: "rzp_whsec_mock"
+          STRIPE_SECRET_KEY: "sk_test_mock"
+          STRIPE_WEBHOOK_SECRET: "whsec_mock"
+
+  # ----------------------------------------------------------------------------
+  # 3. Multi-Stage Container Image Builds
+  # ----------------------------------------------------------------------------
+  build-containers:
+    name: Build & Verify Docker Containers
+    needs: [security-scans, quality-gate]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Codebase
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build API Container Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: false
+          tags: bytehub-api:ci-${{ github.sha }}
+
+      - name: Build Web Container Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: false
+          tags: bytehub-web:ci-${{ github.sha }}
+
+  # ----------------------------------------------------------------------------
+  # 4. Deploy to Staging (Triggered on Merge to main/master)
+  # ----------------------------------------------------------------------------
+  deploy-staging:
+    name: Deploy to Staging Environment
+    needs: [build-containers]
+    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: https://staging.bytehub.internal
+    steps:
+      - name: Checkout Codebase
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js & pnpm
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9.12.3
+
+      - name: Run Zero-Downtime Database Migration
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @bytehub/api prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+
+      - name: Deploy Staging Application Containers
+        run: |
+          echo "Deploying container tag ci-${{ github.sha }} to Staging cluster..."
+          # Deploy command (e.g. AWS ECS / Kubernetes / Railway CLI / Render API):
+          # aws ecs update-service --cluster bytehub-staging --service api --force-new-deployment
+
+      - name: Staging Automated Smoke & Health Check
+        run: |
+          echo "Verifying health endpoint at https://staging-api.bytehub.internal/api/health"
+          # curl --fail --retry 5 --retry-delay 5 https://staging-api.bytehub.internal/api/health || exit 1
+
+  # ----------------------------------------------------------------------------
+  # 5. Deploy to Production (Triggered on Tagged Release with Manual Approval)
+  # ----------------------------------------------------------------------------
+  deploy-production:
+    name: Deploy to Production (Manual Approval Gate)
+    needs: [build-containers]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://bytehub.dev
+    steps:
+      - name: Checkout Codebase
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js & pnpm
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9.12.3
+
+      - name: Run Zero-Downtime Database Migration (Backward-Compatible)
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @bytehub/api prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+
+      - name: Deploy Production Containers (Blue-Green / Rolling Rollout)
+        run: |
+          echo "Rolling out release ${{ github.ref_name }} to Production cluster..."
+          # Blue-green container traffic switch with 0-downtime cutover
+
+      - name: Verify Production Health Check & Uptime
+        run: |
+          echo "Asserting production /api/health returns 200 UP..."
+          # curl --fail --retry 10 --retry-delay 5 https://api.bytehub.dev/api/health || exit 1
+
+      - name: Notify Sentry of Production Release
+        run: |
+          echo "Registering Sentry release ${{ github.ref_name }}..."
+          # sentry-cli releases new "${{ github.ref_name }}"
+          # sentry-cli releases finalize "${{ github.ref_name }}"

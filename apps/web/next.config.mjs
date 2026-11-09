@@ -44,6 +44,7 @@ const securityHeaders = [
 
 const nextConfig = {
   reactStrictMode: true,
+  output: "standalone",
   transpilePackages: ["@bytehub/shared"],
   images: {
     remotePatterns: [

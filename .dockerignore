@@ -1,0 +1,40 @@
+# Node.js dependencies and builds
+node_modules/
+.pnpm-store/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Next.js & Build outputs
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+
+# Environment & Secrets (Never bake into images)
+.env
+.env*.local
+.env.staging
+.env.production
+*.pem
+*.key
+*.cert
+
+# Testing & Coverage
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+
+# System & IDE files
+.git/
+.github/
+.husky/
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
