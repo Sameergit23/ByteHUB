@@ -6,6 +6,8 @@ import { env } from "./config/env.js";
 import { requestIdMiddleware } from "./middleware/requestId.js";
 import { pinoHttpMiddleware } from "./middleware/pinoHttp.js";
 import { errorHandler } from "./middleware/errorHandler.js";
+import { cookieParserMiddleware } from "./middleware/auth.js";
+import { csrfProtection } from "./middleware/csrf.js";
 
 import { healthRouter } from "./routes/health.routes.js";
 import { authRouter } from "./routes/auth.routes.js";
@@ -22,18 +24,27 @@ export const createApp = (): Express => {
   app.use(requestIdMiddleware);
   app.use(pinoHttpMiddleware);
 
-  // 2. Security Headers & CORS
+  // 2. Cookie Parser
+  app.use(cookieParserMiddleware);
+
+  // 3. Security Headers & CORS
   app.use(helmet());
   app.use(
     cors({
       origin: env.NODE_ENV === "production" ? env.FRONTEND_URL : true,
       credentials: true,
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-      allowedHeaders: ["Content-Type", "Authorization", "X-Idempotency-Key", "X-Request-Id"],
+      allowedHeaders: [
+        "Content-Type",
+        "Authorization",
+        "X-Idempotency-Key",
+        "X-Request-Id",
+        "X-CSRF-Token",
+      ],
     })
   );
 
-  // 3. Rate Limiter
+  // 4. Rate Limiter
   const limiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: env.NODE_ENV === "test" ? 10000 : 200,
@@ -48,14 +59,17 @@ export const createApp = (): Express => {
   });
   app.use("/api", limiter);
 
-  // 4. Body Parser
+  // 5. Body Parser
   app.use(express.json({ limit: "2mb" }));
 
-  // 5. Dedicated Health Endpoints (Root & API)
+  // 6. CSRF Protection for state-changing operations
+  app.use(csrfProtection);
+
+  // 7. Dedicated Health Endpoints (Root & API)
   app.use("/health", healthRouter);
   app.use("/api/health", healthRouter);
 
-  // 6. Domain API Routes
+  // 8. Domain API Routes
   app.use("/api/auth", authRouter);
   app.use("/api/internships", internshipsRouter);
   app.use("/api/training", trainingRouter);
@@ -63,7 +77,7 @@ export const createApp = (): Express => {
   app.use("/api/payments", paymentsRouter);
   app.use("/api/admin", adminRouter);
 
-  // 7. Route Not Found (404)
+  // 9. Route Not Found (404)
   app.use((_req, res) => {
     res.status(404).json({
       error: {
@@ -73,7 +87,7 @@ export const createApp = (): Express => {
     });
   });
 
-  // 8. Central Error Handler
+  // 10. Central Error Handler
   app.use(errorHandler);
 
   return app;

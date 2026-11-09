@@ -10,7 +10,7 @@ import {
 test("SignUpSchema: accepts valid student registration", () => {
   const payload = {
     email: "student@bytehub.io",
-    password: "SecurePassword123",
+    password: "SecurePassword123!",
     name: "Aarav Sharma",
     role: "STUDENT",
   };
