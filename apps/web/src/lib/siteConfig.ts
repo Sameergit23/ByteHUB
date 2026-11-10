@@ -10,7 +10,7 @@ export const siteConfig = {
   brandName: "ByteHUB",
 
   /** Public site address used in the legal pages. */
-  siteUrl: process.env.NEXT_PUBLIC_SITE_URL || "https://bytehub.io",
+  siteUrl: process.env.NEXT_PUBLIC_SITE_URL || "https://bytehubnet.com",
 
   contact: {
     // PLACEHOLDER — use mailboxes on your real domain.
@@ -34,7 +34,7 @@ export const siteConfig = {
     legalEntityName: "Sameer Akhtar",
     registeredAddress: "Vijay Nagar, Indore, Madhyapradesh 452020, India",
     // PLACEHOLDER — date the current version of the policies takes effect.
-    effectiveDate: "[Effective date]",
+    effectiveDate: "10 November 2026",
     /** Courts for disputes (Terms, "Governing law"). */
     jurisdictionCity: "Indore, Madhyapradesh",
     /**
@@ -42,8 +42,8 @@ export const siteConfig = {
      * PLACEHOLDER
      */
     grievanceOfficer: {
-      name: "",
-      email: "",
+      name: "Sameer Akhtar",
+      email: "support@bytehubnet.com",
     },
     /** Optional: shown on the Terms page and invoices when you are GST registered. */
     gstin: "",
