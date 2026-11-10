@@ -1,10 +1,8 @@
-import fs from "node:fs/promises";
-import { constants as fsConstants } from "node:fs";
 import { env } from "./env.js";
 import { prisma } from "../lib/prisma.js";
 import { logger } from "../utils/logger.js";
 import { verifyPassword } from "../utils/password.js";
-import { getResumeVaultDir } from "../utils/resumeStorage.js";
+import { checkResumeStorage } from "../utils/resumeStorage.js";
 import {
   DEMO_ACCOUNT_EMAILS,
   DEMO_ACCOUNT_PASSWORD,
@@ -26,20 +24,15 @@ export async function runProductionPreflight(): Promise<PreflightResult> {
   const result: PreflightResult = { fatal: [], warnings: [] };
   if (env.NODE_ENV !== "production") return result;
 
-  // 1. Resume uploads need a writable directory (a mounted volume in containers).
-  const vaultDir = getResumeVaultDir();
-  try {
-    await fs.mkdir(vaultDir, { recursive: true });
-    await fs.access(vaultDir, fsConstants.W_OK);
-  } catch {
-    result.fatal.push(
-      `Resume storage directory "${vaultDir}" is not writable. Mount a persistent volume there ` +
-        "or set RESUME_STORAGE_DIR to a writable path."
-    );
+  // 1. Resume uploads need working storage: a writable (persistent) folder, or Supabase Storage.
+  const storageProblem = await checkResumeStorage();
+  if (storageProblem) {
+    result.fatal.push(storageProblem);
   }
-  if (!env.RESUME_STORAGE_DIR) {
+  if (env.STORAGE_DRIVER !== "supabase") {
     result.warnings.push(
-      "RESUME_STORAGE_DIR is not set; resumes are stored inside the app folder and may be lost on redeploy."
+      "Resumes are stored on this server's disk. Unless that folder is a persistent disk, they are " +
+        "lost on every restart or redeploy (always the case on Render's free plan) — set STORAGE_DRIVER=supabase."
     );
   }
 

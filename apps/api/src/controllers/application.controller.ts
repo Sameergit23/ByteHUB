@@ -2,7 +2,11 @@ import { Request, Response, NextFunction } from "express";
 import path from "node:path";
 import { applicationService } from "../services/application.service.js";
 import { AppError } from "../utils/apiError.js";
-import { verifySignedResumeUrl, getResumeVaultDir } from "../utils/resumeStorage.js";
+import {
+  verifySignedResumeUrl,
+  isValidResumeKey,
+  readResumeFile,
+} from "../utils/resumeStorage.js";
 
 export class ApplicationController {
   static async submit(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -160,21 +164,18 @@ export class ApplicationController {
         throw AppError.forbidden("Invalid or expired resume download signature.");
       }
 
-      // Path Traversal Guard: key must strictly resolve inside storage/vault/resumes
-      const normalizedKey = path.normalize(key).replace(/^(\.\.(\/|\\|$))+/, "");
-      if (!normalizedKey.startsWith("resumes/") || normalizedKey.includes("..")) {
+      // Only keys this server issued ("resumes/<uuid>.pdf|docx") are accepted, which also
+      // rules out any path traversal.
+      if (!isValidResumeKey(key)) {
         throw AppError.forbidden("Access denied: Invalid resume path.");
       }
 
-      const filename = path.basename(normalizedKey);
-      const vaultDir = getResumeVaultDir();
-      const targetFile = path.resolve(vaultDir, filename);
-
-      if (!targetFile.startsWith(vaultDir)) {
-        throw AppError.forbidden("Path traversal violation blocked.");
+      const file = await readResumeFile(key);
+      if (!file) {
+        throw AppError.notFound("This resume file is no longer available.");
       }
 
-      const ext = path.extname(filename).toLowerCase();
+      const ext = path.extname(key).toLowerCase();
       const mimeType =
         ext === ".pdf"
           ? "application/pdf"
@@ -183,7 +184,8 @@ export class ApplicationController {
       res.setHeader("Content-Type", mimeType);
       res.setHeader("X-Content-Type-Options", "nosniff");
       res.setHeader("Content-Disposition", `inline; filename="resume${ext}"`);
-      res.sendFile(targetFile);
+      res.setHeader("Cache-Control", "private, no-store");
+      res.status(200).send(file);
     } catch (err) {
       next(err);
     }

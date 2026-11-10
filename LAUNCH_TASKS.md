@@ -1,0 +1,82 @@
+# ByteHUB — Launch Tasks
+
+Last updated: 10 November 2026. Budget for hosting right now: **₹0**.
+
+## Done
+
+- [x] Code connected to the API, security fixes, legal pages, CI green (GitHub Actions)
+- [x] Next.js 15 / React 19 / Zod 4 / Vitest 4 upgrade (security audit: 1 moderate left)
+- [x] Code on GitHub (`Sameergit23/ByteHUB`, branch `master`)
+- [x] Production database: new Supabase project (Sydney), tables + programmes loaded, demo data retired
+- [x] Domain `bytehubnet.com` recovered in Wix
+- [x] Email sending: Resend domain verified, API key created
+- [x] Email receiving: `support@bytehubnet.com` on Google Workspace
+- [x] Hosting decision: **Option A** — two free Render services (chosen 10 Nov 2026)
+- [x] Resumes stored in Supabase Storage (private bucket, created by the API on first start)
+
+## Hosting decision (made: Option A)
+
+Both options need the code change "store resumes in Supabase Storage" (below), because free
+hosting has no permanent disk.
+
+- [x] **Option A (recommended, CHOSEN): two free services.** The API and website are set up separately,
+      exactly as planned, just on the free plan. It's the simplest. The only code change is moving
+      resumes to Supabase Storage (about 30 minutes of work for Claude). You can upgrade the API to
+      $7/month later, once payments come in, with a single click.
+      Trade-off: each service sleeps after 15 minutes without visitors; the first visit after that
+      takes about 30–60 seconds.
+- [ ] ~~Option B: one combined free service, kept awake.~~ (not chosen) The website and API are packaged into a
+      single service, with a free uptime pinger so it never sleeps. Fast, but more work. It uses
+      about 730 of Render's 750 free hours a month by itself, so your other free Render services
+      would have to be stopped, and running two programs in one container is more fragile.
+
+## Pending — code (Claude)
+
+- [x] Store uploaded resumes in Supabase Storage instead of the server's disk (needed for free hosting)
+
+## Pending — setup (you)
+
+- [ ] GitHub: make `master` the default branch (Settings → General) and delete the starter `main` branch
+- [ ] Render: check **Billing** for free-hour usage; suspend services you no longer need
+- [ ] Render: create the API service — Docker, branch `master`, region **Singapore**, plan **Free**,
+      no disk, health check `/api/health`, environment variables from `.env.production.example`
+      including `STORAGE_DRIVER=supabase`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
+- [ ] Render: create the website service — Dockerfile `apps/web/Dockerfile`, region Singapore, plan Free,
+      `API_INTERNAL_URL` = the API's public address + `/api` (free services can't use Render's
+      private network), `NEXT_PUBLIC_SITE_URL=https://bytehubnet.com`
+- [ ] Render + Wix DNS: connect `bytehubnet.com` and `www.bytehubnet.com` (HTTPS is automatic)
+- [ ] Local: switch `apps/api/.env` to Cashfree **sandbox** keys (it still has live keys)
+
+## Pending — testing (Phase 7, on the live site, sandbox payments)
+
+- [ ] Sign up → verification email arrives in a real inbox (not spam)
+- [ ] Make yourself admin (Supabase SQL: `update "User" set role = 'ADMIN' where email = '...'`)
+- [ ] Company posts an internship → admin approves → student applies with resume → company opens resume
+- [ ] Sandbox payment → seat confirmed, receipt email, appears in dashboard
+- [ ] Forgot password, contact form, refund from admin panel
+- [ ] Resume still opens after a redeploy
+
+## Pending — real payments (Phase 8)
+
+- [ ] Cashfree: finish KYC / business verification and submit the live website for review
+- [ ] Cashfree live dashboard: whitelist `bytehubnet.com`, add webhook
+      `<API address>/api/payments/webhooks/cashfree` (API version `2023-08-01`)
+- [ ] Render: switch to live Cashfree keys, `CASHFREE_ENV=PRODUCTION`
+- [ ] One real ₹1 payment (temporarily set a cohort price to `100` paise), then refund it
+
+## Pending — before / at launch
+
+- [ ] Lawyer reviews Terms, Privacy and Refund pages → set `reviewed: true` in `apps/web/src/lib/siteConfig.ts`
+- [ ] Add real internships (companies sign up and post; approve in `/admin`)
+- [ ] Check every cohort's price, dates and seats in Supabase (Cohort table; prices in paise)
+
+## Later (after launch, when budget allows)
+
+- [ ] Upgrade the API to Render's $7/month plan (no sleeping, always-on background jobs)
+- [ ] Supabase Pro plan for daily backups (the free plan has none)
+- [ ] Sentry error reporting (free tier): set `SENTRY_DSN` on the API
+- [ ] Admin two-factor login
+- [ ] Refunds through Cashfree's API (refunds are recorded in the admin panel but sent manually from the Cashfree dashboard for now)
+- [ ] Rewrite the Playwright browser tests for the live data
+- [ ] Optional: Google Workspace DKIM record (better delivery for emails sent from Workspace)
+- [ ] Remove the two deprecated lines at the top of `.husky/pre-commit` (they break in Husky v10)

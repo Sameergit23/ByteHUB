@@ -30,7 +30,15 @@ const EnvSchema = z.object({
   REDIS_URL: z.string().optional(),
   SENTRY_DSN: z.string().optional(),
   ALERT_WEBHOOK_URL: z.string().optional(),
-  STORAGE_DRIVER: z.enum(["local", "s3", "minio"]).default("local"),
+  // Where uploaded resumes are stored: "local" disk (development, or a mounted disk) or
+  // "supabase" Storage (needed on hosting without a persistent disk, e.g. Render free).
+  // "s3" and "minio" are accepted for older configs but currently behave like "local".
+  STORAGE_DRIVER: z.enum(["local", "supabase", "s3", "minio"]).default("local"),
+  // Supabase Storage (STORAGE_DRIVER=supabase). The service-role / secret key bypasses
+  // row-level security, so it must only ever be set on the API, never on the website.
+  SUPABASE_URL: z.string().url().optional(),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
+  SUPABASE_STORAGE_BUCKET: z.string().min(3).default("resumes"),
   S3_BUCKET_NAME: z.string().default("bytehub-resumes"),
   S3_REGION: z.string().default("ap-south-1"),
   S3_ENDPOINT: z.string().optional(),
@@ -135,6 +143,14 @@ if (env.NODE_ENV === "production") {
     problems.push(
       "Set EMAIL_PROVIDER=RESEND and a real RESEND_API_KEY (SES and SENDGRID are not implemented); " +
         "without it, verification and password-reset emails are never sent."
+    );
+  }
+  if (
+    env.STORAGE_DRIVER === "supabase" &&
+    (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY)
+  ) {
+    problems.push(
+      "STORAGE_DRIVER=supabase needs SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (Supabase → Project Settings → API)."
     );
   }
   if (!/^https:\/\//.test(env.FRONTEND_URL)) {
