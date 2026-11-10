@@ -1,92 +1,253 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { DashboardLayout, NavItem } from "../../../components/dashboard/DashboardLayout";
-import { getStoredUser, apiFetch } from "../../../lib/api";
+import { apiFetch, ApiError, clearAuth, redirectToLogin } from "../../../lib/api";
+import { formatDate, formatMoney, formatStipend } from "../../../lib/format";
 
-const STUDENT_NAV: NavItem[] = [
-  { id: "overview", label: "Overview" },
-  { id: "applications", label: "My Applications", badge: 2 },
-  { id: "training", label: "My Training & Progress", badge: 1 },
-  { id: "payments", label: "Payments & Receipts" },
-  { id: "certificates", label: "Certificates" },
-  { id: "profile", label: "Profile & Settings" },
-];
+/* eslint-disable @typescript-eslint/no-explicit-any -- API payloads are mapped field by field below */
+
+interface ApplicationRow {
+  id: string;
+  role: string;
+  company: string;
+  stipend: string;
+  appliedDate: string;
+  status: string;
+  feedbackNote: string | null;
+}
+
+interface EnrollmentRow {
+  id: string;
+  status: string;
+  cohortId: string;
+  programmeTitle: string;
+  programmeSlug: string;
+  cohortCode: string;
+  mode: string;
+  startDate: string;
+  durationWeeks: number;
+  progressPercent: number;
+  currentWeek: number;
+  weeks: {
+    week: number;
+    title: string;
+    status: "COMPLETED" | "IN_PROGRESS" | "UPCOMING";
+  }[];
+  certificate: { id: string; code: string; title: string; issuedAt: string } | null;
+}
+
+interface PaymentRow {
+  id: string;
+  orderId: string;
+  programmeTitle: string;
+  amount: string;
+  provider: string;
+  date: string;
+  status: string;
+}
+
+interface Profile {
+  name: string;
+  email: string;
+  role: string;
+  isEmailVerified: boolean;
+}
+
+const CLOSED_APPLICATION_STATES = new Set(["WITHDRAWN", "REJECTED"]);
+const WITHDRAWABLE_STATES = new Set(["SUBMITTED", "UNDER_REVIEW", "INTERVIEW"]);
+
+function toEnrollmentRow(e: any): EnrollmentRow {
+  const syllabus: any[] = Array.isArray(e.programme?.syllabus)
+    ? e.programme.syllabus
+    : [];
+  const isComplete = e.status === "COMPLETED";
+
+  return {
+    id: e.id,
+    status: e.status,
+    cohortId: e.cohort.id,
+    programmeTitle: e.programme.title,
+    programmeSlug: e.programme.slug,
+    cohortCode: e.cohort.cohortCode,
+    mode: e.cohort.mode,
+    startDate: formatDate(e.cohort.startDate),
+    durationWeeks: e.cohort.durationWeeks,
+    progressPercent: e.progressPercent ?? 0,
+    currentWeek: e.currentWeek ?? 0,
+    weeks: syllabus.map((w, index) => {
+      const week = Number(w.week) || index + 1;
+      const status =
+        isComplete || (e.currentWeek > 0 && week < e.currentWeek)
+          ? "COMPLETED"
+          : week === e.currentWeek
+            ? "IN_PROGRESS"
+            : "UPCOMING";
+      return { week, title: String(w.title || `Week ${week}`), status };
+    }),
+    certificate:
+      e.certificate && !e.certificate.revokedAt
+        ? {
+            id: e.certificate.id,
+            code: e.certificate.certificateCode,
+            title: e.certificate.title,
+            issuedAt: formatDate(e.certificate.issuedAt),
+          }
+        : null,
+  };
+}
 
 export default function StudentDashboardPage() {
   const [activeTab, setActiveTab] = useState<string>("overview");
-  const [user, setUser] = useState<any>(null);
-  const [profileMessage, setProfileMessage] = useState<string | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [applications, setApplications] = useState<ApplicationRow[]>([]);
+  const [enrollments, setEnrollments] = useState<EnrollmentRow[]>([]);
+  const [payments, setPayments] = useState<PaymentRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
-  useEffect(() => {
-    setUser(getStoredUser());
+  const load = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const [me, apps, enr, pays] = await Promise.all([
+        apiFetch<any>("/auth/me"),
+        apiFetch<any>("/applications/my"),
+        apiFetch<any>("/training/my/enrollments"),
+        apiFetch<any>("/payments/my"),
+      ]);
+
+      setProfile({
+        name: me.data.name,
+        email: me.data.email,
+        role: me.data.role,
+        isEmailVerified: !!me.data.isEmailVerified,
+      });
+
+      setApplications(
+        (apps.data as any[]).map((a) => ({
+          id: a.id,
+          role: a.internship?.title || "Internship",
+          company: a.internship?.companyName || "",
+          stipend: formatStipend(
+            a.internship?.stipendAmount ?? 0,
+            a.internship?.currency
+          ),
+          appliedDate: formatDate(a.createdAt),
+          status: a.status,
+          feedbackNote: a.feedbackNote || null,
+        }))
+      );
+
+      setEnrollments((enr.data as any[]).map(toEnrollmentRow));
+
+      setPayments(
+        (pays.data as any[]).map((p) => ({
+          id: p.id,
+          orderId: p.orderId,
+          programmeTitle: p.programmeTitle,
+          amount: formatMoney(p.amount, p.currency),
+          provider: p.provider,
+          date: formatDate(p.createdAt),
+          status: p.status,
+        }))
+      );
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        redirectToLogin();
+        return;
+      }
+      setLoadError(
+        err instanceof Error
+          ? err.message
+          : "Your dashboard could not be loaded. Please retry."
+      );
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  // Applications mock data
-  const [applications, setApplications] = useState([
-    {
-      id: "app-819",
-      role: "Frontend Developer Intern",
-      company: "Acme Cloud Technologies",
-      stipend: "₹35,000 / mo",
-      appliedDate: "2026-11-08",
-      status: "UNDER_REVIEW",
-    },
-    {
-      id: "app-812",
-      role: "Full-Stack TypeScript Engineer",
-      company: "KiteMetrics HQ",
-      stipend: "₹40,000 / mo",
-      appliedDate: "2026-11-04",
-      status: "SHORTLISTED",
-    },
-  ]);
+  useEffect(() => {
+    void load();
+  }, [load]);
 
-  // Enrolled Training Programs
-  const enrolledTrack = {
-    id: "cohort-web-01",
-    programmeTitle: "Full-Stack Web Development",
-    cohortCode: "WEB-2026-COHORT-01",
-    mode: "[REMOTE / ON-SITE]",
-    progressPercent: 35,
-    currentWeek: "Week 03: Next.js App Router & Server Components",
-    status: "ACTIVE",
-    weeks: [
-      { week: 1, title: "Modern HTML & Semantic Layouts", status: "COMPLETED" },
-      { week: 2, title: "TypeScript & React Architecture", status: "COMPLETED" },
-      { week: 3, title: "Next.js App Router & Server Components", status: "IN_PROGRESS" },
-      { week: 4, title: "Database Integration & Full Deployment", status: "UPCOMING" },
-    ],
+  const activeEnrollments = useMemo(
+    () => enrollments.filter((e) => e.status === "ACTIVE" || e.status === "COMPLETED"),
+    [enrollments]
+  );
+  const pendingEnrollments = useMemo(
+    () => enrollments.filter((e) => e.status === "PENDING"),
+    [enrollments]
+  );
+  const certificates = useMemo(
+    () => enrollments.filter((e) => e.certificate).map((e) => e.certificate!),
+    [enrollments]
+  );
+  const openApplications = applications.filter(
+    (a) => !CLOSED_APPLICATION_STATES.has(a.status)
+  );
+  const currentTrack = activeEnrollments[0] || null;
+
+  const navItems: NavItem[] = [
+    { id: "overview", label: "Overview" },
+    {
+      id: "applications",
+      label: "My Applications",
+      ...(openApplications.length ? { badge: openApplications.length } : {}),
+    },
+    {
+      id: "training",
+      label: "My Training & Progress",
+      ...(activeEnrollments.length ? { badge: activeEnrollments.length } : {}),
+    },
+    { id: "payments", label: "Payments & Receipts" },
+    { id: "certificates", label: "Certificates" },
+    { id: "profile", label: "Profile & Settings" },
+  ];
+
+  const handleWithdraw = async (appId: string) => {
+    if (!confirm("Are you sure you want to withdraw this application?")) return;
+    setBusyId(appId);
+    setNotice(null);
+    try {
+      await apiFetch(`/applications/${appId}/withdraw`, { method: "POST", body: "{}" });
+      setApplications((prev) =>
+        prev.map((a) => (a.id === appId ? { ...a, status: "WITHDRAWN" } : a))
+      );
+      setNotice({ type: "success", text: "Application withdrawn." });
+    } catch (err: any) {
+      setNotice({
+        type: "error",
+        text: err?.message || "The application could not be withdrawn.",
+      });
+    } finally {
+      setBusyId(null);
+    }
   };
 
-  // Payments & Receipts
-  const payments = [
-    {
-      id: "pay_rzp_mock_001",
-      orderId: "order_k9f12a_001",
-      programmeTitle: "Full-Stack Web Development",
-      amount: "₹24,000",
-      provider: "RAZORPAY",
-      date: "2026-11-09",
-      status: "PAID",
-    },
-  ];
-
-  // Certificates
-  const certificates = [
-    {
-      id: "cert_web_001",
-      code: "BYTE-2026-FSW-8192",
-      title: "Full-Stack Web Development Mastery",
-      issuedAt: "2026-11-09",
-      verificationUrl: "/verify/BYTE-2026-FSW-8192",
-    },
-  ];
-
-  const handleWithdraw = (appId: string) => {
-    if (confirm("Are you sure you want to withdraw this application?")) {
-      setApplications(applications.filter((a) => a.id !== appId));
+  const handleResendVerification = async () => {
+    if (!profile) return;
+    setNotice(null);
+    try {
+      await apiFetch("/auth/verify-email/request", {
+        method: "POST",
+        body: JSON.stringify({ email: profile.email }),
+      });
+      setNotice({
+        type: "success",
+        text: `A verification link has been emailed to ${profile.email}.`,
+      });
+    } catch (err: any) {
+      setNotice({
+        type: "error",
+        text: err?.message || "The verification email could not be sent.",
+      });
     }
   };
 
@@ -96,38 +257,107 @@ export default function StudentDashboardPage() {
 
   const handleDeleteAccount = async () => {
     if (
-      confirm(
-        "CAUTION: This will anonymize and purge all your personal records. Do you wish to continue?"
+      !confirm(
+        "CAUTION: This will anonymize and purge all your personal records. This cannot be undone. Do you wish to continue?"
       )
     ) {
-      await apiFetch("/auth/me", { method: "DELETE" }).catch(() => {});
+      return;
+    }
+    setNotice(null);
+    try {
+      await apiFetch("/auth/me", { method: "DELETE" });
+      clearAuth();
       window.location.href = "/auth?mode=login";
+    } catch (err: any) {
+      setNotice({
+        type: "error",
+        text: err?.message || "Your account could not be deleted. Please try again.",
+      });
+    }
+  };
+
+  const handleCopyCredential = async (code: string) => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setNotice({
+        type: "success",
+        text: `Credential code ${code} copied to clipboard.`,
+      });
+    } catch {
+      setNotice({ type: "success", text: `Credential code: ${code}` });
     }
   };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "SUBMITTED":
-        return <span className="inline-block px-2 py-0.5 border border-[#D8D3C4] text-[11px] font-mono text-[#5A574D]">SUBMITTED</span>;
+        return (
+          <span className="inline-block px-2 py-0.5 border border-[#D8D3C4] text-[11px] font-mono text-[#5A574D]">
+            SUBMITTED
+          </span>
+        );
       case "UNDER_REVIEW":
-        return <span className="inline-block px-2 py-0.5 border border-[#16150F] text-[11px] font-mono text-[#16150F] font-bold">UNDER REVIEW</span>;
-      case "SHORTLISTED":
-        return <span className="inline-block px-2 py-0.5 border border-[#B8341A] text-[11px] font-mono text-[#B8341A] font-bold">★ SHORTLISTED</span>;
-      case "ACCEPTED":
-        return <span className="inline-block px-2 py-0.5 bg-[#16150F] text-[#F5F2EA] text-[11px] font-mono font-bold">ACCEPTED</span>;
+        return (
+          <span className="inline-block px-2 py-0.5 border border-[#16150F] text-[11px] font-mono text-[#16150F] font-bold">
+            UNDER REVIEW
+          </span>
+        );
+      case "INTERVIEW":
+        return (
+          <span className="inline-block px-2 py-0.5 border border-[#B8341A] text-[11px] font-mono text-[#B8341A] font-bold">
+            ★ INTERVIEW
+          </span>
+        );
+      case "OFFERED":
+        return (
+          <span className="inline-block px-2 py-0.5 bg-[#16150F] text-[#F5F2EA] text-[11px] font-mono font-bold">
+            OFFERED
+          </span>
+        );
       case "REJECTED":
-        return <span className="inline-block px-2 py-0.5 border border-[#D8D3C4] text-[11px] font-mono text-[#5A574D] line-through">REJECTED</span>;
+        return (
+          <span className="inline-block px-2 py-0.5 border border-[#D8D3C4] text-[11px] font-mono text-[#5A574D] line-through">
+            REJECTED
+          </span>
+        );
+      case "WITHDRAWN":
+        return (
+          <span className="inline-block px-2 py-0.5 border border-[#D8D3C4] text-[11px] font-mono text-[#5A574D]">
+            WITHDRAWN
+          </span>
+        );
       default:
-        return <span className="inline-block px-2 py-0.5 border border-[#D8D3C4] text-[11px] font-mono">{status}</span>;
+        return (
+          <span className="inline-block px-2 py-0.5 border border-[#D8D3C4] text-[11px] font-mono">
+            {status}
+          </span>
+        );
     }
   };
+
+  const emptyState = (text: string, href?: string, cta?: string) => (
+    <div className="border border-[#D8D3C4] bg-[#FAF8F3] p-6 text-sm text-[#5A574D]">
+      {text}
+      {href && cta && (
+        <>
+          {" "}
+          <Link
+            href={href}
+            className="text-[#B8341A] font-medium underline underline-offset-4"
+          >
+            {cta}
+          </Link>
+        </>
+      )}
+    </div>
+  );
 
   return (
     <DashboardLayout
       role="STUDENT"
       title="Student Overview"
       subtitle="Track your internship pipeline, weekly training curriculum, and official certificates."
-      navItems={STUDENT_NAV}
+      navItems={navItems}
       activeNavId={activeTab}
       onNavSelect={setActiveTab}
       actions={
@@ -139,10 +369,59 @@ export default function StudentDashboardPage() {
         </Link>
       }
     >
+      {notice && (
+        <div
+          role={notice.type === "error" ? "alert" : "status"}
+          className={`mb-6 p-3 border text-xs ${
+            notice.type === "error"
+              ? "bg-red-50 border-red-200 text-red-700"
+              : "bg-green-50 border-green-200 text-green-800"
+          }`}
+        >
+          {notice.text}
+        </div>
+      )}
+
+      {loading && (
+        <p className="font-mono text-xs text-[#5A574D]">Loading your dashboard...</p>
+      )}
+
+      {!loading && loadError && (
+        <div
+          role="alert"
+          className="p-4 bg-red-50 border border-red-200 text-red-700 text-sm space-y-3"
+        >
+          <p>{loadError}</p>
+          <button
+            type="button"
+            onClick={() => void load()}
+            className="px-3 py-1.5 border border-red-700 text-xs font-mono"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {!loading && !loadError && profile && !profile.isEmailVerified && (
+        <div className="mb-6 p-3 border border-[#D8D3C4] bg-[#FAF8F3] text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <span>
+            Your email address is not verified yet. Check your inbox for the link we sent
+            to <strong>{profile.email}</strong>.
+          </span>
+          <button
+            type="button"
+            onClick={handleResendVerification}
+            className="self-start sm:self-auto px-3 py-1.5 border border-[#16150F] font-mono hover:bg-[#16150F] hover:text-[#F5F2EA] transition-colors"
+          >
+            Resend link
+          </button>
+        </div>
+      )}
+
       {/* =================================================================== */}
       {/* TAB 1: OVERVIEW                                                     */}
       {/* =================================================================== */}
-      {activeTab === "overview" && (
+      {!loading && !loadError && activeTab === "overview" && (
         <div className="space-y-8">
           {/* KPI Metrics */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -151,21 +430,23 @@ export default function StudentDashboardPage() {
                 Active Applications
               </span>
               <span className="font-heading text-2xl font-bold mt-1 block">
-                {applications.length}
+                {openApplications.length}
               </span>
             </div>
             <div className="border border-[#D8D3C4] bg-[#FAF8F3] p-4">
               <span className="text-[11px] font-mono uppercase text-[#5A574D] block">
                 Enrolled Cohorts
               </span>
-              <span className="font-heading text-2xl font-bold mt-1 block">1</span>
+              <span className="font-heading text-2xl font-bold mt-1 block">
+                {activeEnrollments.length}
+              </span>
             </div>
             <div className="border border-[#D8D3C4] bg-[#FAF8F3] p-4">
               <span className="text-[11px] font-mono uppercase text-[#5A574D] block">
-                Current Progress
+                Cohort Progress
               </span>
               <span className="font-heading text-2xl font-bold mt-1 block text-[#B8341A]">
-                {enrolledTrack.progressPercent}%
+                {currentTrack ? `${currentTrack.progressPercent}%` : "—"}
               </span>
             </div>
             <div className="border border-[#D8D3C4] bg-[#FAF8F3] p-4">
@@ -178,42 +459,73 @@ export default function StudentDashboardPage() {
             </div>
           </div>
 
-          {/* Active Training Banner */}
-          <div className="border border-[#D8D3C4] bg-[#FAF8F3] p-6 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div>
-                <span className="text-xs font-mono uppercase text-[#B8341A] font-semibold">
-                  Active Training Track
-                </span>
-                <h2 className="font-heading text-xl font-bold mt-0.5">
-                  {enrolledTrack.programmeTitle}
-                </h2>
-                <p className="text-xs text-[#5A574D] mt-0.5">
-                  {enrolledTrack.cohortCode} · {enrolledTrack.mode}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveTab("training")}
-                className="self-start sm:self-auto px-3 py-1.5 border border-[#16150F] text-xs font-medium hover:bg-[#16150F] hover:text-[#F5F2EA] transition-colors"
+          {/* Seats that are held but not paid for yet */}
+          {pendingEnrollments.map((e) => (
+            <div
+              key={e.id}
+              className="border border-[#B8341A] bg-[#FAF8F3] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm"
+            >
+              <span>
+                Your seat in <strong>{e.programmeTitle}</strong> is on hold until payment
+                is completed.
+              </span>
+              <Link
+                href={`/training/checkout/${e.cohortId}`}
+                className="self-start sm:self-auto px-3 py-1.5 bg-[#B8341A] text-white text-xs font-medium uppercase tracking-wider"
               >
-                View Syllabus & Progress →
-              </button>
+                Complete payment →
+              </Link>
             </div>
+          ))}
 
-            <div>
-              <div className="flex justify-between text-xs font-mono mb-1.5 text-[#5A574D]">
-                <span>{enrolledTrack.currentWeek}</span>
-                <span>{enrolledTrack.progressPercent}% Completed</span>
+          {/* Active Training Banner */}
+          {currentTrack ? (
+            <div className="border border-[#D8D3C4] bg-[#FAF8F3] p-6 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <span className="text-xs font-mono uppercase text-[#B8341A] font-semibold">
+                    Active Training Track
+                  </span>
+                  <h2 className="font-heading text-xl font-bold mt-0.5">
+                    {currentTrack.programmeTitle}
+                  </h2>
+                  <p className="text-xs text-[#5A574D] mt-0.5">
+                    {currentTrack.cohortCode} · {currentTrack.mode}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("training")}
+                  className="self-start sm:self-auto px-3 py-1.5 border border-[#16150F] text-xs font-medium hover:bg-[#16150F] hover:text-[#F5F2EA] transition-colors"
+                >
+                  View Syllabus & Progress →
+                </button>
               </div>
-              <div className="w-full bg-[#EAE6D9] h-2">
-                <div
-                  className="bg-[#B8341A] h-2 transition-all duration-500"
-                  style={{ width: `${enrolledTrack.progressPercent}%` }}
-                />
+
+              <div>
+                <div className="flex justify-between text-xs font-mono mb-1.5 text-[#5A574D]">
+                  <span>
+                    {currentTrack.currentWeek === 0
+                      ? `Starts ${currentTrack.startDate}`
+                      : `Week ${currentTrack.currentWeek} of ${currentTrack.durationWeeks}`}
+                  </span>
+                  <span>{currentTrack.progressPercent}% of cohort schedule</span>
+                </div>
+                <div className="w-full bg-[#EAE6D9] h-2">
+                  <div
+                    className="bg-[#B8341A] h-2 transition-all duration-500"
+                    style={{ width: `${currentTrack.progressPercent}%` }}
+                  />
+                </div>
               </div>
             </div>
-          </div>
+          ) : (
+            emptyState(
+              "You are not enrolled in a training programme yet.",
+              "/training",
+              "Browse programmes →"
+            )
+          )}
 
           {/* Recent Applications Stacked Table */}
           <div className="space-y-4">
@@ -228,38 +540,46 @@ export default function StudentDashboardPage() {
               </button>
             </div>
 
-            <div className="border border-[#D8D3C4] bg-[#FAF8F3]">
-              {/* Desktop Table Header */}
-              <div className="hidden sm:grid grid-cols-12 px-4 py-2.5 border-b border-[#D8D3C4] text-[11px] font-mono uppercase text-[#5A574D]">
-                <div className="col-span-5">Role & Company</div>
-                <div className="col-span-3">Stipend</div>
-                <div className="col-span-2">Applied Date</div>
-                <div className="col-span-2 text-right">Status</div>
-              </div>
+            {applications.length === 0 ? (
+              emptyState(
+                "You have not applied to any internships yet.",
+                "/internships",
+                "Browse internships →"
+              )
+            ) : (
+              <div className="border border-[#D8D3C4] bg-[#FAF8F3]">
+                {/* Desktop Table Header */}
+                <div className="hidden sm:grid grid-cols-12 px-4 py-2.5 border-b border-[#D8D3C4] text-[11px] font-mono uppercase text-[#5A574D]">
+                  <div className="col-span-5">Role & Company</div>
+                  <div className="col-span-3">Stipend</div>
+                  <div className="col-span-2">Applied Date</div>
+                  <div className="col-span-2 text-right">Status</div>
+                </div>
 
-              {/* Rows (Card-stack on mobile < 640px) */}
-              <div className="divide-y divide-[#D8D3C4]">
-                {applications.map((app) => (
-                  <div
-                    key={app.id}
-                    className="p-4 sm:grid sm:grid-cols-12 sm:px-4 sm:py-3.5 sm:items-center space-y-2 sm:space-y-0"
-                  >
-                    <div className="sm:col-span-5">
-                      <div className="font-bold text-sm text-[#16150F]">{app.role}</div>
-                      <div className="text-xs text-[#5A574D]">{app.company}</div>
+                {/* Rows (Card-stack on mobile < 640px) */}
+                <div className="divide-y divide-[#D8D3C4]">
+                  {applications.slice(0, 5).map((app) => (
+                    <div
+                      key={app.id}
+                      className="p-4 sm:grid sm:grid-cols-12 sm:px-4 sm:py-3.5 sm:items-center space-y-2 sm:space-y-0"
+                    >
+                      <div className="sm:col-span-5">
+                        <div className="font-bold text-sm text-[#16150F]">{app.role}</div>
+                        <div className="text-xs text-[#5A574D]">{app.company}</div>
+                      </div>
+                      <div className="sm:col-span-3 text-xs font-mono">{app.stipend}</div>
+                      <div className="sm:col-span-2 text-xs font-mono text-[#5A574D]">
+                        {app.appliedDate}
+                      </div>
+                      <div className="sm:col-span-2 sm:text-right flex items-center justify-between sm:justify-end">
+                        <span className="sm:hidden text-xs text-[#5A574D]">Status:</span>
+                        {getStatusBadge(app.status)}
+                      </div>
                     </div>
-                    <div className="sm:col-span-3 text-xs font-mono">{app.stipend}</div>
-                    <div className="sm:col-span-2 text-xs font-mono text-[#5A574D]">
-                      {app.appliedDate}
-                    </div>
-                    <div className="sm:col-span-2 sm:text-right flex items-center justify-between sm:justify-end">
-                      <span className="sm:hidden text-xs text-[#5A574D]">Status:</span>
-                      {getStatusBadge(app.status)}
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       )}
@@ -267,138 +587,204 @@ export default function StudentDashboardPage() {
       {/* =================================================================== */}
       {/* TAB 2: MY APPLICATIONS                                              */}
       {/* =================================================================== */}
-      {activeTab === "applications" && (
+      {!loading && !loadError && activeTab === "applications" && (
         <div className="space-y-6">
-          <div className="border border-[#D8D3C4] bg-[#FAF8F3]">
-            <div className="divide-y divide-[#D8D3C4]">
-              {applications.map((app) => (
-                <div key={app.id} className="p-4 sm:p-6 space-y-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div>
-                      <h3 className="font-heading font-bold text-base text-[#16150F]">
-                        {app.role}
-                      </h3>
-                      <p className="text-xs text-[#5A574D]">
-                        {app.company} · Applied on {app.appliedDate} · Stipend: {app.stipend}
-                      </p>
+          {applications.length === 0 ? (
+            emptyState(
+              "You have not applied to any internships yet.",
+              "/internships",
+              "Browse internships →"
+            )
+          ) : (
+            <div className="border border-[#D8D3C4] bg-[#FAF8F3]">
+              <div className="divide-y divide-[#D8D3C4]">
+                {applications.map((app) => (
+                  <div key={app.id} className="p-4 sm:p-6 space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <h3 className="font-heading font-bold text-base text-[#16150F]">
+                          {app.role}
+                        </h3>
+                        <p className="text-xs text-[#5A574D]">
+                          {app.company} · Applied on {app.appliedDate} · Stipend:{" "}
+                          {app.stipend}
+                        </p>
+                      </div>
+                      <div>{getStatusBadge(app.status)}</div>
                     </div>
-                    <div>{getStatusBadge(app.status)}</div>
-                  </div>
 
-                  <div className="pt-2 flex items-center gap-3 text-xs">
-                    <button
-                      type="button"
-                      onClick={() => handleWithdraw(app.id)}
-                      className="text-[#5A574D] hover:text-[#B8341A] font-mono underline"
-                    >
-                      Withdraw application
-                    </button>
+                    {app.feedbackNote && (
+                      <p className="text-xs text-[#16150F] border-l-2 border-[#16150F] pl-3">
+                        Note from the company: {app.feedbackNote}
+                      </p>
+                    )}
+
+                    {WITHDRAWABLE_STATES.has(app.status) && (
+                      <div className="pt-2 flex items-center gap-3 text-xs">
+                        <button
+                          type="button"
+                          disabled={busyId === app.id}
+                          onClick={() => handleWithdraw(app.id)}
+                          className="text-[#5A574D] hover:text-[#B8341A] font-mono underline disabled:opacity-50"
+                        >
+                          {busyId === app.id ? "Withdrawing..." : "Withdraw application"}
+                        </button>
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 
       {/* =================================================================== */}
       {/* TAB 3: TRAINING & PROGRESS                                          */}
       {/* =================================================================== */}
-      {activeTab === "training" && (
+      {!loading && !loadError && activeTab === "training" && (
         <div className="space-y-6">
-          <div className="border border-[#D8D3C4] bg-[#FAF8F3] p-6 space-y-4">
-            <h2 className="font-heading text-xl font-bold">{enrolledTrack.programmeTitle}</h2>
-            <p className="text-xs text-[#5A574D]">
-              Cohort Code: {enrolledTrack.cohortCode} · Status: {enrolledTrack.status}
-            </p>
+          {activeEnrollments.length === 0 &&
+            emptyState(
+              "You are not enrolled in a training programme yet.",
+              "/training",
+              "Browse programmes →"
+            )}
 
-            <div className="space-y-3 pt-4">
-              <h3 className="font-mono text-xs uppercase tracking-wider font-semibold text-[#5A574D]">
-                Syllabus Weeks
-              </h3>
-              <div className="border border-[#D8D3C4] divide-y divide-[#D8D3C4]">
-                {enrolledTrack.weeks.map((w) => (
-                  <div key={w.week} className="p-3.5 flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-3">
-                      <span className="font-mono text-[#5A574D]">Week 0{w.week}</span>
-                      <span className="font-medium text-[#16150F]">{w.title}</span>
-                    </div>
-                    <span
-                      className={`font-mono text-[11px] px-2 py-0.5 border ${
-                        w.status === "COMPLETED"
-                          ? "bg-[#16150F] text-[#F5F2EA] border-[#16150F]"
-                          : w.status === "IN_PROGRESS"
-                          ? "border-[#B8341A] text-[#B8341A] font-bold"
-                          : "border-[#D8D3C4] text-[#5A574D]"
-                      }`}
-                    >
-                      {w.status}
-                    </span>
+          {activeEnrollments.map((track) => (
+            <div
+              key={track.id}
+              className="border border-[#D8D3C4] bg-[#FAF8F3] p-6 space-y-4"
+            >
+              <h2 className="font-heading text-xl font-bold">{track.programmeTitle}</h2>
+              <p className="text-xs text-[#5A574D]">
+                Cohort Code: {track.cohortCode} · Status: {track.status} · Starts{" "}
+                {track.startDate} · {track.durationWeeks} weeks
+              </p>
+
+              <div className="space-y-3 pt-4">
+                <h3 className="font-mono text-xs uppercase tracking-wider font-semibold text-[#5A574D]">
+                  Syllabus
+                </h3>
+                {track.weeks.length === 0 ? (
+                  <p className="text-xs text-[#5A574D]">
+                    The syllabus will be published before the cohort starts.
+                  </p>
+                ) : (
+                  <div className="border border-[#D8D3C4] divide-y divide-[#D8D3C4]">
+                    {track.weeks.map((w) => (
+                      <div
+                        key={w.week}
+                        className="p-3.5 flex items-center justify-between text-xs"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="font-mono text-[#5A574D]">
+                            Week {String(w.week).padStart(2, "0")}
+                          </span>
+                          <span className="font-medium text-[#16150F]">{w.title}</span>
+                        </div>
+                        <span
+                          className={`font-mono text-[11px] px-2 py-0.5 border ${
+                            w.status === "COMPLETED"
+                              ? "bg-[#16150F] text-[#F5F2EA] border-[#16150F]"
+                              : w.status === "IN_PROGRESS"
+                                ? "border-[#B8341A] text-[#B8341A] font-bold"
+                                : "border-[#D8D3C4] text-[#5A574D]"
+                          }`}
+                        >
+                          {w.status.replace("_", " ")}
+                        </span>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
               </div>
             </div>
-          </div>
+          ))}
         </div>
       )}
 
       {/* =================================================================== */}
       {/* TAB 4: PAYMENTS & RECEIPTS                                          */}
       {/* =================================================================== */}
-      {activeTab === "payments" && (
+      {!loading && !loadError && activeTab === "payments" && (
         <div className="space-y-6">
-          <div className="border border-[#D8D3C4] bg-[#FAF8F3] divide-y divide-[#D8D3C4]">
-            {payments.map((p) => (
-              <div
-                key={p.id}
-                className="p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-              >
-                <div className="space-y-1">
-                  <div className="font-bold text-sm">{p.programmeTitle}</div>
-                  <div className="text-xs text-[#5A574D] font-mono">
-                    Order ID: {p.orderId} · Gateway: {p.provider} · Date: {p.date}
-                  </div>
-                  <div className="text-xs font-mono font-bold text-[#B8341A]">{p.amount}</div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => window.open(`/api/payments/${p.orderId}/invoice`, "_blank")}
-                  className="self-start sm:self-auto px-4 py-2 border border-[#16150F] text-xs font-mono hover:bg-[#16150F] hover:text-[#F5F2EA] transition-colors"
+          {payments.length === 0 ? (
+            emptyState(
+              "No payments yet. Receipts appear here after you enrol in a programme."
+            )
+          ) : (
+            <div className="border border-[#D8D3C4] bg-[#FAF8F3] divide-y divide-[#D8D3C4]">
+              {payments.map((p) => (
+                <div
+                  key={p.id}
+                  className="p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
                 >
-                  Download PDF Receipt
-                </button>
-              </div>
-            ))}
-          </div>
+                  <div className="space-y-1">
+                    <div className="font-bold text-sm">{p.programmeTitle}</div>
+                    <div className="text-xs text-[#5A574D] font-mono">
+                      Order ID: {p.orderId} · Gateway: {p.provider} · Date: {p.date}
+                    </div>
+                    <div className="text-xs font-mono font-bold text-[#B8341A]">
+                      {p.amount} · {p.status.replace("_", " ")}
+                    </div>
+                  </div>
+                  {(p.status === "PAID" || p.status === "PARTIALLY_REFUNDED") && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        window.open(
+                          `/api/payments/${encodeURIComponent(p.orderId)}/invoice`,
+                          "_blank"
+                        )
+                      }
+                      className="self-start sm:self-auto px-4 py-2 border border-[#16150F] text-xs font-mono hover:bg-[#16150F] hover:text-[#F5F2EA] transition-colors"
+                    >
+                      Download PDF Receipt
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
       {/* =================================================================== */}
       {/* TAB 5: CERTIFICATES                                                 */}
       {/* =================================================================== */}
-      {activeTab === "certificates" && (
+      {!loading && !loadError && activeTab === "certificates" && (
         <div className="space-y-6">
           <div className="border border-[#D8D3C4] bg-[#FAF8F3] p-6 space-y-4">
             <h2 className="font-heading text-lg font-bold">Issued Certificates</h2>
-            <div className="border border-[#D8D3C4] divide-y divide-[#D8D3C4]">
-              {certificates.map((c) => (
-                <div key={c.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div>
-                    <h3 className="font-bold text-sm">{c.title}</h3>
-                    <p className="text-xs text-[#5A574D] font-mono mt-0.5">
-                      Code: {c.code} · Issued: {c.issuedAt}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => alert(`Verification URL: ${c.verificationUrl}`)}
-                    className="px-3 py-1.5 border border-[#16150F] text-xs font-mono hover:bg-[#16150F] hover:text-white"
+            {certificates.length === 0 ? (
+              <p className="text-xs text-[#5A574D]">
+                Certificates are issued when you complete a training programme.
+              </p>
+            ) : (
+              <div className="border border-[#D8D3C4] divide-y divide-[#D8D3C4]">
+                {certificates.map((c) => (
+                  <div
+                    key={c.id}
+                    className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
                   >
-                    View Credential
-                  </button>
-                </div>
-              ))}
-            </div>
+                    <div>
+                      <h3 className="font-bold text-sm">{c.title}</h3>
+                      <p className="text-xs text-[#5A574D] font-mono mt-0.5">
+                        Code: {c.code} · Issued: {c.issuedAt}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyCredential(c.code)}
+                      className="px-3 py-1.5 border border-[#16150F] text-xs font-mono hover:bg-[#16150F] hover:text-white"
+                    >
+                      Copy Credential Code
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -406,22 +792,35 @@ export default function StudentDashboardPage() {
       {/* =================================================================== */}
       {/* TAB 6: PROFILE & PRIVACY (GDPR / DPDP)                              */}
       {/* =================================================================== */}
-      {activeTab === "profile" && (
+      {!loading && !loadError && activeTab === "profile" && (
         <div className="space-y-8 max-w-2xl">
           <div className="border border-[#D8D3C4] bg-[#FAF8F3] p-6 space-y-4">
             <h2 className="font-heading text-lg font-bold">Student Profile Details</h2>
             <div className="space-y-3 text-xs font-mono">
               <div>
                 <span className="text-[#5A574D] block">Full Name:</span>
-                <span className="font-bold text-sm text-[#16150F]">{user?.name || "Student"}</span>
+                <span className="font-bold text-sm text-[#16150F]">
+                  {profile?.name || ""}
+                </span>
               </div>
               <div>
                 <span className="text-[#5A574D] block">Email Address:</span>
-                <span className="font-bold text-[#16150F]">{user?.email || ""}</span>
+                <span className="font-bold text-[#16150F]">
+                  {profile?.email || ""}{" "}
+                  <span
+                    className={
+                      profile?.isEmailVerified ? "text-green-800" : "text-[#B8341A]"
+                    }
+                  >
+                    ({profile?.isEmailVerified ? "verified" : "not verified"})
+                  </span>
+                </span>
               </div>
               <div>
                 <span className="text-[#5A574D] block">Role:</span>
-                <span className="font-bold text-[#B8341A]">{user?.role || "STUDENT"}</span>
+                <span className="font-bold text-[#B8341A]">
+                  {profile?.role || "STUDENT"}
+                </span>
               </div>
             </div>
           </div>
@@ -432,8 +831,9 @@ export default function StudentDashboardPage() {
               Privacy & Data Protection (GDPR / DPDP)
             </h2>
             <p className="text-xs text-[#5A574D]">
-              Under GDPR and India&apos;s DPDP regulations, you can download a complete machine-readable
-              copy of all your profile, application, and transaction data, or permanently delete your account.
+              Under GDPR and India&apos;s DPDP regulations, you can download a complete
+              machine-readable copy of all your profile, application, and transaction
+              data, or permanently delete your account.
             </p>
 
             <div className="flex flex-wrap gap-4 pt-2">

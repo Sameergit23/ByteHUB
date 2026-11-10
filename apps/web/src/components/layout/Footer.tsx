@@ -1,5 +1,7 @@
 import React from "react";
 import Link from "next/link";
+import { ByteHubLogo } from "../brand/ByteHubLogo";
+import { siteConfig } from "../../lib/siteConfig";
 
 export const Footer: React.FC = () => {
   return (
@@ -9,11 +11,16 @@ export const Footer: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10 pb-12 border-b border-editorial-border">
           {/* Column 1: Brand & Manifesto */}
           <div className="space-y-4">
-            <div className="font-heading font-bold text-xl text-ink">
-              [YOUR BRAND]
-            </div>
+            <Link
+              href="/"
+              className="inline-block hover:opacity-90 transition-opacity"
+              aria-label="ByteHUB Home"
+            >
+              <ByteHubLogo variant="light" size="md" withTagline />
+            </Link>
             <p className="text-xs font-sans text-editorial-muted leading-relaxed max-w-xs">
-              Real projects. Real mentors. Your first step into tech. Guided training programmes connected directly to verified internship opportunities.
+              Real projects. Real mentors. Your first step into tech. Guided training
+              programmes connected directly to verified internship opportunities.
             </p>
           </div>
 
@@ -105,7 +112,7 @@ export const Footer: React.FC = () => {
               Standards
             </h4>
             <div className="space-y-2 text-xs font-sans text-editorial-muted leading-relaxed">
-              <p>Razorpay India & Stripe Global PCI-DSS</p>
+              <p>Payments by Cashfree (PCI-DSS)</p>
               <p>PostgreSQL ACID Transaction Isolation</p>
               <p>WCAG 2.2 AA Accessibility Audited</p>
               <p>Zero Artificial Intelligence Gimmicks</p>
@@ -116,15 +123,37 @@ export const Footer: React.FC = () => {
         {/* Colophon */}
         <div className="pt-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs font-mono text-editorial-muted">
           <div>
-            © {new Date().getFullYear()} BYTEHUB PLATFORM. ALL RIGHTS RESERVED.
+            © {new Date().getFullYear()} {siteConfig.legal.legalEntityName.toUpperCase()}.
+            ALL RIGHTS RESERVED.
           </div>
-          <div className="flex items-center gap-6">
-            <span>SWISS-EDITORIAL SYSTEM</span>
-            <span className="text-accent font-semibold">STATUS: PRODUCTION-GRADE</span>
-          </div>
+          <nav aria-label="Legal" className="flex flex-wrap items-center gap-x-6 gap-y-2">
+            <Link
+              href="/terms"
+              className="hover:text-ink min-h-[44px] inline-flex items-center"
+            >
+              TERMS OF SERVICE
+            </Link>
+            <Link
+              href="/privacy"
+              className="hover:text-ink min-h-[44px] inline-flex items-center"
+            >
+              PRIVACY POLICY
+            </Link>
+            <Link
+              href="/refund-policy"
+              className="hover:text-ink min-h-[44px] inline-flex items-center"
+            >
+              REFUND &amp; CANCELLATION
+            </Link>
+            <Link
+              href="/contact"
+              className="hover:text-ink min-h-[44px] inline-flex items-center"
+            >
+              CONTACT
+            </Link>
+          </nav>
         </div>
       </div>
     </footer>
   );
 };
-

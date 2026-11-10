@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import {
   PaymentStatus,
@@ -48,11 +49,11 @@ export class PaymentRepository {
     orderId: string;
     userId: string;
     cohortId: string;
-    provider: "RAZORPAY" | "STRIPE";
+    provider: "CASHFREE" | "RAZORPAY" | "STRIPE";
     amount: number;
     currency: string;
     idempotencyKey: string;
-    metadata?: Record<string, any>;
+    metadata?: Prisma.InputJsonObject;
   }) {
     return prisma.payment.create({
       data: {
@@ -62,7 +63,7 @@ export class PaymentRepository {
         provider: data.provider,
         amount: data.amount,
         currency: data.currency,
-        status: PaymentStatus.CREATED as any,
+        status: PaymentStatus.CREATED,
         idempotencyKey: data.idempotencyKey,
         metadata: data.metadata || {},
       },
@@ -97,7 +98,7 @@ export class PaymentRepository {
     return prisma.payment.update({
       where: { id: paymentId },
       data: {
-        status: newStatus as any,
+        status: newStatus,
         ...(extraData?.gatewayPaymentId
           ? { gatewayPaymentId: extraData.gatewayPaymentId }
           : {}),
@@ -117,10 +118,10 @@ export class PaymentRepository {
 
   async recordPaymentEvent(data: {
     paymentId?: string;
-    provider: "RAZORPAY" | "STRIPE";
+    provider: "CASHFREE" | "RAZORPAY" | "STRIPE";
     eventType: string;
     eventId: string;
-    rawPayload: any;
+    rawPayload: Prisma.InputJsonValue;
     signatureHeader?: string;
     processed?: boolean;
     processingError?: string;
@@ -158,7 +159,7 @@ export class PaymentRepository {
     gatewayPaymentId: string;
     gatewaySignature?: string;
     eventId?: string;
-    metadata?: any;
+    metadata?: Prisma.InputJsonValue;
   }) {
     return prisma.$transaction(async (tx) => {
       // 1. Fetch current payment with row locking
@@ -181,7 +182,7 @@ export class PaymentRepository {
       const updatedPayment = await tx.payment.update({
         where: { id: params.paymentId },
         data: {
-          status: PaymentStatus.PAID as any,
+          status: PaymentStatus.PAID,
           gatewayPaymentId: params.gatewayPaymentId,
           gatewaySignature: params.gatewaySignature,
         },
@@ -196,6 +197,15 @@ export class PaymentRepository {
       });
 
       if (enrollment) {
+        // If the hold had already lapsed its seat went back to the pool; take one again.
+        if (enrollment.status === "EXPIRED" || enrollment.status === "CANCELLED") {
+          await tx.$executeRaw`
+            UPDATE "Cohort"
+            SET "seatsLeft" = GREATEST(0, "seatsLeft" - 1), "updatedAt" = NOW()
+            WHERE "id" = ${params.cohortId};
+          `;
+        }
+
         enrollment = await tx.enrollment.update({
           where: { id: enrollment.id },
           data: {
@@ -272,7 +282,7 @@ export class PaymentRepository {
 
       const updatedPayment = await tx.payment.update({
         where: { id: params.paymentId },
-        data: { status: PaymentStatus.FAILED as any },
+        data: { status: PaymentStatus.FAILED },
       });
 
       // Find pending enrollment and release
@@ -380,7 +390,7 @@ export class PaymentRepository {
       // Update payment status
       await tx.payment.update({
         where: { id: payment.id },
-        data: { status: nextStatus as any },
+        data: { status: nextStatus },
       });
 
       // If full refund: cancel enrollment and release seat back to cohort
@@ -429,6 +439,19 @@ export class PaymentRepository {
   }
 
   // --- Stale Payments for Nightly Reconciliation ---
+  /** Open (unsettled) payments created at least `minMinutes` ago, oldest first. */
+  async findOpenPaymentsOlderThan(minMinutes = 30, limit = 200) {
+    const cutoff = new Date(Date.now() - minMinutes * 60 * 1000);
+    return prisma.payment.findMany({
+      where: {
+        status: { in: ["CREATED", "PENDING"] },
+        createdAt: { lte: cutoff },
+      },
+      orderBy: { createdAt: "asc" },
+      take: limit,
+    });
+  }
+
   async findStalePaymentsForReconciliation(hours = 24) {
     const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000);
     return prisma.payment.findMany({

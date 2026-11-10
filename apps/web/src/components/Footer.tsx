@@ -16,10 +16,13 @@ export function Footer() {
               </span>
             </div>
             <p className="font-heading text-2xl font-bold tracking-tight text-ink max-w-md">
-              A high-precision talent infrastructure for systems engineers, technical founders, and verified companies.
+              A high-precision talent infrastructure for systems engineers, technical
+              founders, and verified companies.
             </p>
             <p className="text-xs font-sans text-editorial-muted max-w-lg leading-relaxed">
-              We bridge the delta between university computer science curricula and production infrastructure. Zero puffery, zero gamification, verified compensation, and rigorous technical evaluations.
+              We bridge the delta between university computer science curricula and
+              production infrastructure. Zero puffery, zero gamification, verified
+              compensation, and rigorous technical evaluations.
             </p>
           </div>
 
@@ -39,7 +42,10 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <Link href="/for-companies" className="hover:text-accent transition-colors">
+                <Link
+                  href="/for-companies"
+                  className="hover:text-accent transition-colors"
+                >
                   For Companies
                 </Link>
               </li>
@@ -62,22 +68,34 @@ export function Footer() {
             </h4>
             <ul className="space-y-2 text-xs font-mono">
               <li>
-                <Link href="/auth?mode=login" className="hover:text-accent transition-colors">
+                <Link
+                  href="/auth?mode=login"
+                  className="hover:text-accent transition-colors"
+                >
                   Student Sign In
                 </Link>
               </li>
               <li>
-                <Link href="/auth?mode=signup" className="hover:text-accent transition-colors">
+                <Link
+                  href="/auth?mode=signup"
+                  className="hover:text-accent transition-colors"
+                >
                   Student Enrollment
                 </Link>
               </li>
               <li>
-                <Link href="/for-companies" className="hover:text-accent transition-colors">
+                <Link
+                  href="/for-companies"
+                  className="hover:text-accent transition-colors"
+                >
                   Post Internship
                 </Link>
               </li>
               <li>
-                <Link href="/dashboard/company" className="hover:text-accent transition-colors">
+                <Link
+                  href="/dashboard/company"
+                  className="hover:text-accent transition-colors"
+                >
                   Company Console
                 </Link>
               </li>
@@ -94,7 +112,7 @@ export function Footer() {
               [ 03 // INTEGRITY ]
             </h4>
             <div className="space-y-2 text-[11px] font-mono text-editorial-muted leading-relaxed">
-              <p>Razorpay India (UPI / Cards / Netbanking)</p>
+              <p>Cashfree India (UPI / Cards / Netbanking)</p>
               <p>Stripe Global (3D Secure 2 / PCI DSS)</p>
               <p>PostgreSQL ACID Transactions</p>
               <p>WCAG 2.2 AA Accessibility Audited</p>
@@ -117,4 +135,3 @@ export function Footer() {
     </footer>
   );
 }
-

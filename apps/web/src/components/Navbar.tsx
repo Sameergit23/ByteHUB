@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { getStoredUser, clearAuthToken, StoredUser } from "../lib/api";
+import { getStoredUser, logout, StoredUser } from "../lib/api";
+import { ByteHubLogo } from "./brand/ByteHubLogo";
 
 export function Navbar() {
   const pathname = usePathname();
@@ -14,8 +15,8 @@ export function Navbar() {
     setUser(getStoredUser());
   }, [pathname]);
 
-  const handleLogout = () => {
-    clearAuthToken();
+  const handleLogout = async () => {
+    await logout();
     setUser(null);
     window.location.href = "/";
   };
@@ -48,12 +49,10 @@ export function Navbar() {
         <div className="flex items-center gap-8">
           <Link
             href="/"
-            className="flex items-baseline gap-2 font-heading font-bold text-xl sm:text-2xl text-ink tracking-tight hover:text-accent transition-colors"
+            className="hover:opacity-90 transition-opacity inline-flex items-center min-h-[44px]"
+            aria-label="ByteHUB Home"
           >
-            <span className="border-2 border-ink px-1.5 py-0.5 text-xs font-mono tracking-widest text-ink">
-              BH
-            </span>
-            <span>BYTEHUB</span>
+            <ByteHubLogo variant="light" size="sm" />
           </Link>
 
           <nav className="hidden md:flex items-center gap-6" aria-label="Main Navigation">
@@ -85,8 +84,8 @@ export function Navbar() {
                   user.role === "ADMIN"
                     ? "/admin"
                     : user.role === "COMPANY"
-                    ? "/dashboard/company"
-                    : "/dashboard/student"
+                      ? "/dashboard/company"
+                      : "/dashboard/student"
                 }
                 className="border border-ink bg-transparent text-ink px-3 py-1.5 text-xs font-mono font-medium hover:bg-ink hover:text-canvas transition-colors"
               >
@@ -152,8 +151,8 @@ export function Navbar() {
                     user.role === "ADMIN"
                       ? "/admin"
                       : user.role === "COMPANY"
-                      ? "/dashboard/company"
-                      : "/dashboard/student"
+                        ? "/dashboard/company"
+                        : "/dashboard/student"
                   }
                   onClick={() => setMenuOpen(false)}
                   className="border border-ink text-center py-2 text-xs font-mono bg-ink text-canvas"
@@ -191,4 +190,3 @@ export function Navbar() {
     </header>
   );
 }
-

@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+import { notificationService } from "./notification.service.js";
 import crypto from "node:crypto";
 import { prisma } from "../lib/prisma.js";
 import { env } from "../config/env.js";
@@ -27,7 +28,7 @@ export class AuthService {
   private async issueTokenPair(
     user: { id: string; email: string; role: UserRole; name: string },
     deviceInfo?: string,
-    familyId?: string
+    _familyId?: string
   ): Promise<TokenPair> {
     const accessExpiresIn = "15m";
     const refreshExpiresDays = 7;
@@ -42,7 +43,9 @@ export class AuthService {
     const tokenHash = hashToken(rawRefreshToken);
 
     const accessTokenExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
-    const refreshTokenExpiresAt = new Date(Date.now() + refreshExpiresDays * 24 * 60 * 60 * 1000);
+    const refreshTokenExpiresAt = new Date(
+      Date.now() + refreshExpiresDays * 24 * 60 * 60 * 1000
+    );
 
     // Persist refresh token hash in DB
     await prisma.refreshToken.create({
@@ -69,7 +72,9 @@ export class AuthService {
     // 1. Enforce minimum 10 characters and common-passwords dictionary check
     const validation = validatePasswordStrength(input.password);
     if (!validation.valid) {
-      throw AppError.badRequest(validation.message || "Password does not meet complexity standards");
+      throw AppError.badRequest(
+        validation.message || "Password does not meet complexity standards"
+      );
     }
 
     // 2. Check for duplicate email
@@ -83,54 +88,63 @@ export class AuthService {
     // 3. Hash with Argon2id
     const passwordHash = await hashPassword(input.password);
 
-    // 4. Create User and profile within a transaction
-    const user = await prisma.$transaction(async (tx) => {
-      const newUser = await tx.user.create({
-        data: {
-          email: input.email.toLowerCase().trim(),
-          passwordHash,
-          name: input.name.trim(),
-          role: input.role as any,
-          organizationName: input.role === "COMPANY" ? input.organizationName : null,
-        },
-      });
+    // 4. Create User and profile within a transaction with safe timeout for remote db
+    const user = await prisma.$transaction(
+      async (tx) => {
+        const newUser = await tx.user.create({
+          data: {
+            email: input.email.toLowerCase().trim(),
+            passwordHash,
+            name: input.name.trim(),
+            role: input.role,
+            organizationName: input.role === "COMPANY" ? input.organizationName : null,
+          },
+        });
 
-      if (input.role === "STUDENT") {
-        await tx.studentProfile.create({
+        if (input.role === "STUDENT") {
+          await tx.studentProfile.create({
+            data: {
+              userId: newUser.id,
+              college: "Pending Profile Completion",
+              graduationYear: new Date().getFullYear() + 1,
+              degree: "Computer Science & Engineering",
+            },
+          });
+        } else if (input.role === "COMPANY") {
+          await tx.companyProfile.create({
+            data: {
+              userId: newUser.id,
+              companyName: input.organizationName || input.name,
+            },
+          });
+        }
+
+        await tx.auditLog.create({
           data: {
             userId: newUser.id,
-            college: "Pending Profile Completion",
-            graduationYear: new Date().getFullYear() + 1,
-            degree: "Computer Science & Engineering",
+            action: "AUTH_REGISTER_SUCCESS",
+            entityType: "USER",
+            entityId: newUser.id,
+            ipAddress: ip,
+            details: { role: newUser.role, emailDomain: newUser.email.split("@")[1] },
           },
         });
-      } else if (input.role === "COMPANY") {
-        await tx.companyProfile.create({
-          data: {
-            userId: newUser.id,
-            companyName: input.organizationName || input.name,
-          },
-        });
+
+        return newUser;
+      },
+      {
+        maxWait: 15000,
+        timeout: 30000,
       }
-
-      await tx.auditLog.create({
-        data: {
-          userId: newUser.id,
-          action: "AUTH_REGISTER_SUCCESS",
-          entityType: "USER",
-          entityId: newUser.id,
-          ipAddress: ip,
-          details: { role: newUser.role, emailDomain: newUser.email.split("@")[1] },
-        },
-      });
-
-      return newUser;
-    });
+    );
 
     const tokens = await this.issueTokenPair(
       { id: user.id, email: user.email, role: user.role as UserRole, name: user.name },
       userAgent
     );
+
+    // Send the "verify your email" link. Never blocks or fails the sign-up itself.
+    await this.issueEmailVerification(user).catch(() => null);
 
     return {
       tokens,
@@ -142,6 +156,27 @@ export class AuthService {
         organizationName: user.organizationName,
       },
     };
+  }
+
+  /**
+   * Creates a 24-hour single-use verification token and emails the link.
+   */
+  private async issueEmailVerification(user: {
+    id: string;
+    name: string;
+    email: string;
+  }) {
+    const rawToken = generateSecureToken(32);
+
+    await prisma.emailVerificationToken.create({
+      data: {
+        userId: user.id,
+        tokenHash: hashToken(rawToken),
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      },
+    });
+
+    await notificationService.sendVerificationEmail(user, rawToken);
   }
 
   /**
@@ -174,16 +209,18 @@ export class AuthService {
     if (!isMatch) {
       const failStatus = authRateLimiter.recordFailure(rateKey);
       if (failStatus.locked) {
-        await prisma.auditLog.create({
-          data: {
-            userId: user.id,
-            action: "SECURITY_ACCOUNT_LOCKED",
-            entityType: "USER",
-            entityId: user.id,
-            ipAddress: ip,
-            details: { reason: "Max failed authentication attempts exceeded" },
-          },
-        }).catch(() => null);
+        await prisma.auditLog
+          .create({
+            data: {
+              userId: user.id,
+              action: "SECURITY_ACCOUNT_LOCKED",
+              entityType: "USER",
+              entityId: user.id,
+              ipAddress: ip,
+              details: { reason: "Max failed authentication attempts exceeded" },
+            },
+          })
+          .catch(() => null);
 
         throw AppError.forbidden(
           `Security alert: Maximum failed attempts exceeded. Account locked for ${failStatus.lockoutDurationSeconds} seconds.`
@@ -196,16 +233,18 @@ export class AuthService {
     authRateLimiter.recordSuccess(rateKey);
 
     // Audit log
-    await prisma.auditLog.create({
-      data: {
-        userId: user.id,
-        action: "AUTH_LOGIN_SUCCESS",
-        entityType: "USER",
-        entityId: user.id,
-        ipAddress: ip,
-        details: { role: user.role },
-      },
-    }).catch(() => null);
+    await prisma.auditLog
+      .create({
+        data: {
+          userId: user.id,
+          action: "AUTH_LOGIN_SUCCESS",
+          entityType: "USER",
+          entityId: user.id,
+          ipAddress: ip,
+          details: { role: user.role },
+        },
+      })
+      .catch(() => null);
 
     const tokens = await this.issueTokenPair(
       { id: user.id, email: user.email, role: user.role as UserRole, name: user.name },
@@ -252,20 +291,25 @@ export class AuthService {
         data: { revokedAt: new Date() },
       });
 
-      await prisma.auditLog.create({
-        data: {
-          userId: storedToken.userId,
-          action: "SECURITY_REFRESH_TOKEN_REUSE_DETECTED",
-          entityType: "SESSION",
-          entityId: storedToken.id,
-          ipAddress: ip,
-          details: {
-            warning: "Attempted reuse of revoked refresh token. All user sessions terminated.",
+      await prisma.auditLog
+        .create({
+          data: {
+            userId: storedToken.userId,
+            action: "SECURITY_REFRESH_TOKEN_REUSE_DETECTED",
+            entityType: "SESSION",
+            entityId: storedToken.id,
+            ipAddress: ip,
+            details: {
+              warning:
+                "Attempted reuse of revoked refresh token. All user sessions terminated.",
+            },
           },
-        },
-      }).catch(() => null);
+        })
+        .catch(() => null);
 
-      throw AppError.unauthorized("Security alert: Session replay detected. All active sessions have been terminated.");
+      throw AppError.unauthorized(
+        "Security alert: Session replay detected. All active sessions have been terminated."
+      );
     }
 
     // Check expiration
@@ -323,20 +367,25 @@ export class AuthService {
         },
       });
 
-      await prisma.auditLog.create({
-        data: {
-          userId: user.id,
-          action: "AUTH_PASSWORD_RESET_REQUESTED",
-          entityType: "USER",
-          entityId: user.id,
-          ipAddress: ip,
-        },
-      }).catch(() => null);
+      await prisma.auditLog
+        .create({
+          data: {
+            userId: user.id,
+            action: "AUTH_PASSWORD_RESET_REQUESTED",
+            entityType: "USER",
+            entityId: user.id,
+            ipAddress: ip,
+          },
+        })
+        .catch(() => null);
+
+      await notificationService.sendPasswordResetEmail(user, rawToken, ip);
     }
 
     // Always return neutral constant-time message
     return {
-      message: "If an account with that email address exists, password reset instructions have been dispatched.",
+      message:
+        "If an account with that email address exists, password reset instructions have been dispatched.",
     };
   }
 
@@ -346,7 +395,9 @@ export class AuthService {
   async resetPassword(token: string, newPassword: string, ip: string) {
     const validation = validatePasswordStrength(newPassword);
     if (!validation.valid) {
-      throw AppError.badRequest(validation.message || "Password does not meet complexity standards");
+      throw AppError.badRequest(
+        validation.message || "Password does not meet complexity standards"
+      );
     }
 
     const tokenHash = hashToken(token);
@@ -392,7 +443,9 @@ export class AuthService {
       });
     });
 
-    return { message: "Password updated successfully. Please sign in with your new password." };
+    return {
+      message: "Password updated successfully. Please sign in with your new password.",
+    };
   }
 
   /**
@@ -403,22 +456,13 @@ export class AuthService {
       where: { email: email.toLowerCase().trim() },
     });
 
-    if (user && !user.isEmailVerified) {
-      const rawToken = generateSecureToken(32);
-      const tokenHash = hashToken(rawToken);
-      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
-
-      await prisma.emailVerificationToken.create({
-        data: {
-          userId: user.id,
-          tokenHash,
-          expiresAt,
-        },
-      });
+    if (user && !user.deletedAt && !user.isEmailVerified) {
+      await this.issueEmailVerification(user);
     }
 
     return {
-      message: "If that email is registered and unverified, a verification link has been dispatched.",
+      message:
+        "If that email is registered and unverified, a verification link has been dispatched.",
     };
   }
 
@@ -472,15 +516,17 @@ export class AuthService {
       data: { revokedAt: new Date() },
     });
 
-    await prisma.auditLog.create({
-      data: {
-        userId,
-        action: "AUTH_LOGOUT_ALL_SESSIONS",
-        entityType: "USER",
-        entityId: userId,
-        ipAddress: ip,
-      },
-    }).catch(() => null);
+    await prisma.auditLog
+      .create({
+        data: {
+          userId,
+          action: "AUTH_LOGOUT_ALL_SESSIONS",
+          entityType: "USER",
+          entityId: userId,
+          ipAddress: ip,
+        },
+      })
+      .catch(() => null);
 
     return { message: "All active sessions have been terminated." };
   }

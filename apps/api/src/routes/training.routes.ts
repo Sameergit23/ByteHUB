@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { TrainingController } from "../controllers/training.controller.js";
+import { authenticateJWT } from "../middleware/auth.js";
 
-export const trainingRouter = Router();
+export const trainingRouter: Router = Router();
 
 export const DEFAULT_PROGRAMS = [
   {
@@ -22,13 +23,15 @@ export const DEFAULT_PROGRAMS = [
       {
         week: 1,
         title: "OS Primitives & Memory Layout",
-        description: "Memory models, pointer arithmetic, system calls, virtual memory, cache lines.",
+        description:
+          "Memory models, pointer arithmetic, system calls, virtual memory, cache lines.",
         deliverables: ["Custom malloc implementation", "POSIX thread pool benchmark"],
       },
       {
         week: 2,
         title: "Network Programming & Wire Protocols",
-        description: "TCP handshake, socket programming, binary serialization, custom RPC frames.",
+        description:
+          "TCP handshake, socket programming, binary serialization, custom RPC frames.",
         deliverables: ["Binary RPC serialization parser"],
       },
     ],
@@ -43,4 +46,11 @@ export const DEFAULT_PROGRAMS = [
 ];
 
 trainingRouter.get("/", TrainingController.list);
+
+// Signed-in student: own enrolments with programme, progress and certificate
+trainingRouter.get("/my/enrollments", authenticateJWT, TrainingController.myEnrollments);
+
+// Public: one cohort with its programme (used by the checkout page)
+trainingRouter.get("/cohorts/:cohortId", TrainingController.getCohort);
+
 trainingRouter.get("/:slugOrId", TrainingController.getBySlugOrId);

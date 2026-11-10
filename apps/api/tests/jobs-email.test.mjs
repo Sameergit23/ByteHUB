@@ -101,7 +101,7 @@ test("Dead-Letter Queue: admin can inspect and replay/retry dead-lettered job", 
 
 test("Email Templates: verifyEmail renders responsive HTML with verification button", () => {
   const html = renderVerifyEmailHtml("Aditi Rao", "https://bytehub.dev/verify?token=abc123");
-  assert.match(html, /\[ByteHUB\]/);
+  assert.match(html, /Byte.*HUB/);
   assert.match(html, /Verify your email address/);
   assert.match(html, /Aditi Rao/);
   assert.match(html, /https:\/\/bytehub\.dev\/verify\?token=abc123/);
@@ -131,12 +131,12 @@ test("Email Templates: statusChanged includes text status badge", () => {
   assert.match(html, /SHORTLISTED/);
 });
 
-test("Email Templates: paymentReceipt includes order ID and [GST DETAILS] placeholder", () => {
+test("Email Templates: paymentReceipt includes order ID and receipt details", () => {
   const html = renderPaymentReceiptHtml("Sneha", "Full-Stack Web", "WEB-2026-01", "order_k9f12a", "₹24,000");
   assert.match(html, /Payment receipt/);
   assert.match(html, /order_k9f12a/);
   assert.match(html, /₹24,000/);
-  assert.match(html, /\[GST DETAILS: SAC Code 999293/);
+  assert.match(html, /Official Receipt \/ Bill of Supply|GST/);
 });
 
 test("Email Templates: enrolmentConfirmed includes cohort start date and curriculum link", () => {

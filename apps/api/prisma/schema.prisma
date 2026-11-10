@@ -39,6 +39,7 @@ enum ApplicationStatus {
 }
 
 enum PaymentProvider {
+  CASHFREE
   RAZORPAY
   STRIPE
 }

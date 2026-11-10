@@ -20,7 +20,10 @@ export function encryptAtRest(text: string, secretKey: string | Buffer): string 
   return `${iv.toString("hex")}:${authTag}:${encrypted}`;
 }
 
-export function decryptAtRest(encryptedPayload: string, secretKey: string | Buffer): string {
+export function decryptAtRest(
+  encryptedPayload: string,
+  secretKey: string | Buffer
+): string {
   if (!encryptedPayload || typeof encryptedPayload !== "string") {
     return encryptedPayload;
   }
@@ -31,6 +34,9 @@ export function decryptAtRest(encryptedPayload: string, secretKey: string | Buff
   }
 
   const [ivHex, authTagHex, ciphertextHex] = parts;
+  if (!ivHex || !authTagHex || !ciphertextHex) {
+    throw new Error("Invalid encrypted format. Expected iv:authTag:ciphertext");
+  }
   const key = Buffer.isBuffer(secretKey)
     ? secretKey
     : crypto.createHash("sha256").update(secretKey).digest();
@@ -46,4 +52,3 @@ export function decryptAtRest(encryptedPayload: string, secretKey: string | Buff
 
   return decrypted;
 }
-

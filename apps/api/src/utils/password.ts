@@ -51,7 +51,8 @@ export function validatePasswordStrength(password: string): PasswordValidationRe
   if (COMMON_PASSWORDS.has(normalized)) {
     return {
       valid: false,
-      message: "Password is too common and easily guessed. Please choose a unique passphrase.",
+      message:
+        "Password is too common and easily guessed. Please choose a unique passphrase.",
     };
   }
 
@@ -98,7 +99,10 @@ export async function hashPassword(password: string): Promise<string> {
 /**
  * Verify password against Argon2id formatted hash in constant time
  */
-export async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
+export async function verifyPassword(
+  password: string,
+  storedHash: string
+): Promise<boolean> {
   if (!storedHash || !password) return false;
 
   // Handle standard Argon2id / scrypt format
@@ -131,8 +135,16 @@ export async function verifyPassword(password: string, storedHash: string): Prom
   // Fallback for bcrypt hashes seeded earlier during setup
   if (storedHash.startsWith("$2a$") || storedHash.startsWith("$2b$")) {
     try {
-      const bcrypt = await import("bcryptjs");
-      return await bcrypt.compare(password, storedHash);
+      type Compare = (plain: string, hash: string) => Promise<boolean>;
+      const bcryptModule = (await import("bcryptjs")) as unknown as {
+        compare?: Compare;
+        default?: { compare?: Compare };
+      };
+      const compare = bcryptModule.default?.compare || bcryptModule.compare;
+      if (typeof compare === "function") {
+        return await compare(password, storedHash);
+      }
+      return false;
     } catch {
       return false;
     }
@@ -154,4 +166,3 @@ export function hashToken(rawToken: string): string {
 export function generateSecureToken(bytes: number = 32): string {
   return crypto.randomBytes(bytes).toString("hex");
 }
-

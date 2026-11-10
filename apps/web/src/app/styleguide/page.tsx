@@ -7,7 +7,7 @@ import { Select } from "../../components/ui/Select";
 import { Textarea } from "../../components/ui/Textarea";
 import { Checkbox } from "../../components/ui/Checkbox";
 import { Chip } from "../../components/ui/Chip";
-import { Card, CardHeader, CardTitle } from "../../components/ui/Card";
+import { Card, CardTitle } from "../../components/ui/Card";
 import { Tabs } from "../../components/ui/Tabs";
 import { Modal } from "../../components/ui/Modal";
 import { Toast } from "../../components/ui/Toast";
@@ -16,6 +16,11 @@ import { Pagination } from "../../components/ui/Pagination";
 import { Stepper } from "../../components/ui/Stepper";
 import { Skeleton } from "../../components/ui/Skeleton";
 import { EmptyState } from "../../components/ui/EmptyState";
+import {
+  ByteHubLogo,
+  ByteHubSymbol,
+  ByteHubAppIcon,
+} from "../../components/brand/ByteHubLogo";
 
 interface DemoInternship {
   id: string;
@@ -44,41 +49,41 @@ export default function StyleguidePage() {
       id: "1",
       role: "Frontend Developer Intern",
       track: "Web Development",
-      mode: "[REMOTE / ON-SITE]",
-      duration: "[WEEKS]",
-      stipend: "[STIPEND]",
+      mode: "Hybrid",
+      duration: "12 weeks",
+      stipend: "₹35,000 / mo",
     },
     {
       id: "2",
       role: "Mobile App Intern",
       track: "App Development",
-      mode: "[REMOTE / ON-SITE]",
-      duration: "[WEEKS]",
-      stipend: "[STIPEND]",
+      mode: "Remote",
+      duration: "16 weeks",
+      stipend: "₹40,000 / mo",
     },
     {
       id: "3",
       role: "Data Analyst Intern",
       track: "Data & AI",
-      mode: "[REMOTE / ON-SITE]",
-      duration: "[WEEKS]",
-      stipend: "[STIPEND]",
+      mode: "On-site",
+      duration: "12 weeks",
+      stipend: "₹30,000 / mo",
     },
     {
       id: "4",
       role: "UI/UX Design Intern",
       track: "UI/UX Design",
-      mode: "[REMOTE / ON-SITE]",
-      duration: "[WEEKS]",
-      stipend: "[STIPEND]",
+      mode: "Remote",
+      duration: "10 weeks",
+      stipend: "₹32,000 / mo",
     },
     {
       id: "5",
       role: "Backend Developer Intern",
       track: "Web Development",
-      mode: "[REMOTE / ON-SITE]",
-      duration: "[WEEKS]",
-      stipend: "[STIPEND]",
+      mode: "Hybrid",
+      duration: "16 weeks",
+      stipend: "₹45,000 / mo",
     },
   ];
 
@@ -130,9 +135,84 @@ export default function StyleguidePage() {
           COMPONENT STYLEGUIDE & FOUNDATION
         </h1>
         <p className="font-sans text-sm sm:text-base text-editorial-muted max-w-3xl leading-relaxed">
-          Comprehensive specification of colors, typography, touch targets (≥44px), form controls, modal dialogues, interactive tabs, and tables that collapse to cards at 360px viewport.
+          Comprehensive specification of colors, typography, touch targets (≥44px), form
+          controls, modal dialogues, interactive tabs, and tables that collapse to cards
+          at 360px viewport.
         </p>
       </div>
+
+      {/* 0. Brand Identity: Official Logo in 3 Formats */}
+      <section className="space-y-6">
+        <div className="border-b border-editorial-border pb-3">
+          <h2 className="font-heading text-2xl font-bold text-ink">
+            00. BRAND IDENTITY // OFFICIAL LOGO SYSTEM (3 FORMATS)
+          </h2>
+          <p className="text-xs font-mono text-editorial-muted mt-1">
+            Optimized for light surfaces, dark backgrounds, high-DPI viewports, and app
+            icons / favicons
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Format 1: Primary Light Logo */}
+          <div className="border border-editorial-border bg-white p-6 space-y-4 flex flex-col justify-between">
+            <div className="space-y-2">
+              <span className="text-[11px] font-mono uppercase tracking-wider text-accent font-bold">
+                FORMAT 01 // LIGHT SURFACES
+              </span>
+              <p className="text-xs font-sans text-editorial-muted leading-relaxed">
+                Primary horizontal logo with tagline. Used in site headers, footers,
+                invoices, and email templates.
+              </p>
+            </div>
+            <div className="py-8 px-4 bg-[#F5F2EA] border border-editorial-border flex items-center justify-center">
+              <ByteHubLogo variant="light" size="lg" withTagline />
+            </div>
+            <div className="text-[11px] font-mono text-editorial-muted">
+              Usage: &lt;ByteHubLogo variant=&quot;light&quot; withTagline /&gt;
+            </div>
+          </div>
+
+          {/* Format 2: Inverted Dark Logo */}
+          <div className="border border-editorial-border bg-white p-6 space-y-4 flex flex-col justify-between">
+            <div className="space-y-2">
+              <span className="text-[11px] font-mono uppercase tracking-wider text-accent font-bold">
+                FORMAT 02 // DARK SURFACES
+              </span>
+              <p className="text-xs font-sans text-editorial-muted leading-relaxed">
+                Inverted logo with white wordmark &amp; golden-amber &quot;HUB&quot;. Used
+                on dark banners, CTAs, and splash screens.
+              </p>
+            </div>
+            <div className="py-8 px-4 bg-[#0A1128] border border-editorial-border flex items-center justify-center">
+              <ByteHubLogo variant="dark" size="lg" withTagline />
+            </div>
+            <div className="text-[11px] font-mono text-editorial-muted">
+              Usage: &lt;ByteHubLogo variant=&quot;dark&quot; withTagline /&gt;
+            </div>
+          </div>
+
+          {/* Format 3: App Icon & Standalone Symbol */}
+          <div className="border border-editorial-border bg-white p-6 space-y-4 flex flex-col justify-between">
+            <div className="space-y-2">
+              <span className="text-[11px] font-mono uppercase tracking-wider text-accent font-bold">
+                FORMAT 03 // APP ICON &amp; SYMBOL
+              </span>
+              <p className="text-xs font-sans text-editorial-muted leading-relaxed">
+                Squircle app badge and standalone network mark. Used for favicons, mobile
+                nav, and PWA icons.
+              </p>
+            </div>
+            <div className="py-8 px-4 bg-[#F5F2EA] border border-editorial-border flex items-center justify-center gap-6">
+              <ByteHubAppIcon size={56} />
+              <ByteHubSymbol size={52} />
+            </div>
+            <div className="text-[11px] font-mono text-editorial-muted">
+              Usage: &lt;ByteHubAppIcon /&gt; &amp; &lt;ByteHubSymbol /&gt;
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* 1. Design Tokens: Colors */}
       <section className="space-y-6">
@@ -190,13 +270,16 @@ export default function StyleguidePage() {
             02. BUTTONS // REAL BUTTONS (MIN 44PX TOUCH TARGET)
           </h2>
           <p className="text-xs font-mono text-editorial-muted mt-1">
-            Solid accent (#B8341A), 1px Outline, and Text variants with visible focus rings
+            Solid accent (#B8341A), 1px Outline, and Text variants with visible focus
+            rings
           </p>
         </div>
 
         <div className="border border-editorial-border bg-white p-6 space-y-6">
           <div className="space-y-2">
-            <span className="text-xs font-mono uppercase text-editorial-muted">VARIANTS:</span>
+            <span className="text-xs font-mono uppercase text-editorial-muted">
+              VARIANTS:
+            </span>
             <div className="flex flex-wrap items-center gap-4">
               <Button variant="primary">Browse internships (Primary)</Button>
               <Button variant="outline">Explore training (Outline)</Button>
@@ -208,7 +291,9 @@ export default function StyleguidePage() {
           </div>
 
           <div className="space-y-2 border-t border-editorial-line pt-4">
-            <span className="text-xs font-mono uppercase text-editorial-muted">SIZES:</span>
+            <span className="text-xs font-mono uppercase text-editorial-muted">
+              SIZES:
+            </span>
             <div className="flex flex-wrap items-center gap-4">
               <Button variant="primary" size="sm">
                 Apply now (sm: 44px)
@@ -231,7 +316,8 @@ export default function StyleguidePage() {
             03. FORM CONTROLS // ACCESSIBLE INPUTS & VALIDATION
           </h2>
           <p className="text-xs font-mono text-editorial-muted mt-1">
-            Square corners, min 44px height, high contrast focus states, and semantic error alerts
+            Square corners, min 44px height, high contrast focus states, and semantic
+            error alerts
           </p>
         </div>
 
@@ -404,7 +490,8 @@ export default function StyleguidePage() {
             06. TABS & TABLE // EXACT MATCH TO DESIGN REFERENCE IMAGE 2
           </h2>
           <p className="text-xs font-mono text-editorial-muted mt-1">
-            Active tab with red bottom border, table collapsing to stacked cards on mobile (&lt;768px)
+            Active tab with red bottom border, table collapsing to stacked cards on mobile
+            (&lt;768px)
           </p>
         </div>
 
@@ -479,7 +566,9 @@ export default function StyleguidePage() {
             <div className="pt-2">
               <Toast
                 type={toastType}
-                title={toastType === "success" ? "TRANSACTION COMMITTED" : "SIGNATURE ERROR"}
+                title={
+                  toastType === "success" ? "TRANSACTION COMMITTED" : "SIGNATURE ERROR"
+                }
                 message={toastMessage}
                 onDismiss={() => setToastMessage(null)}
               />
@@ -537,9 +626,13 @@ export default function StyleguidePage() {
       >
         <div className="space-y-4 pt-2">
           <p className="text-sm text-editorial-muted leading-relaxed">
-            ByteHUB uses strict proof-of-work validation. Ensure your repositories include verifiable commit history and automated test harnesses.
+            ByteHUB uses strict proof-of-work validation. Ensure your repositories include
+            verifiable commit history and automated test harnesses.
           </p>
-          <Input label="Primary Repository URL" placeholder="https://github.com/username/repo" />
+          <Input
+            label="Primary Repository URL"
+            placeholder="https://github.com/username/repo"
+          />
           <div className="pt-4 flex justify-end gap-3 border-t border-editorial-line">
             <Button variant="outline" size="sm" onClick={() => setModalOpen(false)}>
               Cancel
@@ -561,4 +654,3 @@ export default function StyleguidePage() {
     </div>
   );
 }
-

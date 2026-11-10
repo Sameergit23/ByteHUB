@@ -1,15 +1,43 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
 import { ColophonFooter } from "../../components/layout/ColophonFooter";
-import { setAuthToken, setStoredUser, apiFetch } from "../../lib/api";
+import { ByteHubLogo } from "../../components/brand/ByteHubLogo";
+import {
+  setStoredUser,
+  getStoredUser,
+  clearAuth,
+  apiFetch,
+  errorMessage,
+  ApiEnvelope,
+  StoredUser,
+} from "../../lib/api";
 
-export default function AuthPage() {
+/** Only same-site paths are accepted as a post-login destination (no open redirects). */
+function safeRedirect(value: string | null): string | null {
+  if (
+    !value ||
+    !value.startsWith("/") ||
+    value.startsWith("//") ||
+    value.includes("\\")
+  ) {
+    return null;
+  }
+  return value;
+}
+
+function homeForRole(role: string): string {
+  if (role === "ADMIN") return "/admin";
+  if (role === "COMPANY") return "/dashboard/company";
+  return "/dashboard/student";
+}
+
+function AuthForm() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -36,30 +64,43 @@ export default function AuthPage() {
     }
   }, [urlMode]);
 
-  const handleQuickLogin = (email: string, userRole: "STUDENT" | "COMPANY" | "ADMIN", name: string) => {
-    setError(null);
-    setSuccessMessage(null);
-    const mockUser = {
-      id: `usr_${userRole.toLowerCase()}_demo`,
-      email,
-      name,
-      role: userRole,
-      organizationName: userRole === "COMPANY" ? "HyperGrid Systems" : null,
-    };
-    setAuthToken(`mock_jwt_${userRole.toLowerCase()}_${Date.now()}`);
-    setStoredUser(mockUser);
+  // Someone who was signed in but whose 15-minute access cookie lapsed lands here from the
+  // route guard. Renew the session quietly and send them straight back.
+  const [restoring, setRestoring] = useState(false);
+  useEffect(() => {
+    const known = getStoredUser();
+    if (!known) return;
 
-    const redirect = searchParams.get("redirect");
-    if (redirect) {
-      router.push(redirect);
-    } else if (userRole === "ADMIN") {
-      router.push("/admin");
-    } else if (userRole === "COMPANY") {
-      router.push("/dashboard/company");
-    } else {
-      router.push("/dashboard/student");
-    }
-  };
+    let cancelled = false;
+    setRestoring(true);
+    // Asking the API who we are proves the session cookie really works (apiFetch renews an
+    // expired one on the way), so this can never bounce in a loop with the route guard.
+    apiFetch<ApiEnvelope<StoredUser | null>>("/auth/me")
+      .then((res) => {
+        if (cancelled) return;
+        const me = res?.data;
+        if (!me?.id) throw new Error("No active session");
+        setStoredUser({
+          id: me.id,
+          name: me.name,
+          email: me.email,
+          role: me.role,
+          organizationName: me.organizationName,
+        });
+        // Full navigation so the route guard sees the renewed cookie.
+        window.location.replace(
+          safeRedirect(searchParams.get("redirect")) || homeForRole(me.role)
+        );
+      })
+      .catch(() => {
+        if (cancelled) return;
+        clearAuth();
+        setRestoring(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,10 +114,14 @@ export default function AuthPage() {
         await apiFetch("/auth/forgot-password", {
           method: "POST",
           body: JSON.stringify({ email: formData.email }),
-        }).catch(() => null);
+        });
 
         setSuccessMessage(
-          "If an account exists with that email address, password reset instructions have been dispatched."
+          "If an account exists with that email address, a password reset link has been emailed to it. The link is valid for 1 hour."
+        );
+      } catch (err) {
+        setError(
+          errorMessage(err, "Could not request a password reset. Please try again.")
         );
       } finally {
         setLoading(false);
@@ -107,7 +152,7 @@ export default function AuthPage() {
 
     try {
       if (mode === "signup") {
-        const res = await apiFetch<any>("/auth/register", {
+        const res = await apiFetch<ApiEnvelope<{ user?: StoredUser }>>("/auth/register", {
           method: "POST",
           body: JSON.stringify({
             name: formData.name,
@@ -116,134 +161,67 @@ export default function AuthPage() {
             role,
             organizationName: role === "COMPANY" ? formData.organizationName : undefined,
           }),
-        }).catch(() => {
-          // Fallback simulation for offline preview
-          return {
-            status: "success",
-            data: {
-              accessToken: `token_${Date.now()}`,
-              user: {
-                id: `usr_${Date.now()}`,
-                name: formData.name,
-                email: formData.email,
-                role,
-                organizationName: role === "COMPANY" ? formData.organizationName : null,
-              },
-            },
-          };
         });
 
-        const user = res.data?.user || {
-          id: `usr_${Date.now()}`,
-          name: formData.name,
-          email: formData.email,
-          role,
-          organizationName: formData.organizationName,
-        };
-
-        if (res.data?.accessToken) {
-          setAuthToken(res.data.accessToken);
+        const user = res.data?.user;
+        if (!user) {
+          throw new Error("Registration succeeded but user profile was not returned.");
         }
+
         setStoredUser(user);
-
-        const redirect = searchParams.get("redirect");
-        if (redirect) {
-          router.push(redirect);
-        } else if (role === "COMPANY") {
-          router.push("/dashboard/company");
-        } else {
-          router.push("/dashboard/student");
-        }
+        router.push(safeRedirect(searchParams.get("redirect")) || homeForRole(user.role));
+        router.refresh();
       } else {
-        const res = await apiFetch<any>("/auth/login", {
+        const res = await apiFetch<ApiEnvelope<{ user?: StoredUser }>>("/auth/login", {
           method: "POST",
           body: JSON.stringify({
             email: formData.email,
             password: formData.password,
           }),
-        }).catch(() => {
-          // Demo fallback
-          const inferredRole: "ADMIN" | "COMPANY" | "STUDENT" = formData.email.includes("admin")
-            ? "ADMIN"
-            : formData.email.includes("company") || formData.email.includes("recruiting")
-            ? "COMPANY"
-            : "STUDENT";
-
-          return {
-            status: "success",
-            data: {
-              accessToken: `token_${Date.now()}`,
-              user: {
-                id: `usr_${inferredRole.toLowerCase()}_demo`,
-                name: formData.email.split("@")[0] || "User",
-                email: formData.email,
-                role: inferredRole,
-                organizationName: inferredRole === "COMPANY" ? "Acme Labs" : null,
-              },
-            },
-          };
         });
 
-        const user = res.data?.user || {
-          id: `usr_${Date.now()}`,
-          name: formData.email.split("@")[0] || "User",
-          email: formData.email,
-          role: "STUDENT",
-        };
-
-        if (res.data?.accessToken) {
-          setAuthToken(res.data.accessToken);
+        const user = res.data?.user;
+        if (!user) {
+          throw new Error("Login succeeded but user session profile was not returned.");
         }
+
         setStoredUser(user);
-
-        const redirect = searchParams.get("redirect");
-        if (redirect) {
-          router.push(redirect);
-        } else if (user.role === "ADMIN") {
-          router.push("/admin");
-        } else if (user.role === "COMPANY") {
-          router.push("/dashboard/company");
-        } else {
-          router.push("/dashboard/student");
-        }
+        router.push(safeRedirect(searchParams.get("redirect")) || homeForRole(user.role));
+        router.refresh();
       }
-    } catch (err: any) {
-      setError(err.message || "Authentication failed. Check credentials.");
+    } catch (err) {
+      setError(errorMessage(err, "Authentication failed. Check credentials."));
     } finally {
       setLoading(false);
     }
   };
 
-  const handleGoogleOAuth = async () => {
-    try {
-      const res = await apiFetch<any>("/auth/oauth/google/start").catch(() => null);
-      if (res?.data?.authUrl) {
-        window.location.href = res.data.authUrl;
-      } else {
-        handleQuickLogin("student@bytehub.io", "STUDENT", "Maya Sen (Google OAuth)");
-      }
-    } catch {
-      handleQuickLogin("student@bytehub.io", "STUDENT", "Maya Sen (Google OAuth)");
-    }
-  };
+  if (restoring) {
+    return (
+      <div className="min-h-screen bg-canvas flex items-center justify-center font-mono text-xs text-editorial-muted">
+        Restoring your session...
+      </div>
+    );
+  }
 
   return (
     <div className="w-full bg-canvas min-h-screen py-12 sm:py-16 flex flex-col justify-between">
       <div className="max-w-md w-full mx-auto px-4 sm:px-6 space-y-6">
         {/* Header Masthead */}
-        <div className="text-center space-y-2">
+        <div className="text-center space-y-4 flex flex-col items-center">
           <Link
             href="/"
-            className="font-heading text-2xl font-bold tracking-tight text-ink hover:text-accent inline-block"
+            className="hover:opacity-90 transition-opacity inline-flex items-center justify-center"
+            aria-label="ByteHUB Home"
           >
-            [YOUR BRAND]
+            <ByteHubLogo variant="light" size="lg" withTagline />
           </Link>
           <p className="font-sans text-xs sm:text-sm text-editorial-muted">
             {mode === "login"
               ? "Sign in to access your applications, courses, and pipeline"
               : mode === "signup"
-              ? "Create an account to apply for internships or post openings"
-              : "Enter your registered email to receive password reset instructions"}
+                ? "Create an account to apply for internships or post openings"
+                : "Enter your registered email to receive password reset instructions"}
           </p>
         </div>
 
@@ -364,9 +342,7 @@ export default function AuthPage() {
                   required
                   placeholder="e.g. Maya Sen"
                   value={formData.name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, name: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 />
 
                 {role === "COMPANY" && (
@@ -392,9 +368,7 @@ export default function AuthPage() {
               required
               placeholder="name@domain.com"
               value={formData.email}
-              onChange={(e) =>
-                setFormData({ ...formData, email: e.target.value })
-              }
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
             />
 
             {mode !== "forgot" && (
@@ -409,9 +383,7 @@ export default function AuthPage() {
                   required
                   placeholder="••••••••••••"
                   value={formData.password}
-                  onChange={(e) =>
-                    setFormData({ ...formData, password: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 />
                 {mode === "login" && (
                   <div className="text-right">
@@ -441,78 +413,43 @@ export default function AuthPage() {
               {mode === "login"
                 ? "Sign in"
                 : mode === "signup"
-                ? "Create account"
-                : "Send recovery link"}
+                  ? "Create account"
+                  : "Send recovery link"}
             </Button>
+
+            {mode === "signup" && (
+              <p className="text-[11px] font-sans text-editorial-muted text-center leading-relaxed">
+                By creating an account you agree to our{" "}
+                <Link href="/terms" className="text-ink underline">
+                  Terms of Service
+                </Link>{" "}
+                and{" "}
+                <Link href="/privacy" className="text-ink underline">
+                  Privacy Policy
+                </Link>
+                .
+              </p>
+            )}
           </form>
-
-          {/* Google OAuth Option */}
-          {mode !== "forgot" && (
-            <div className="pt-2">
-              <div className="relative flex py-2 items-center">
-                <div className="flex-grow border-t border-editorial-line"></div>
-                <span className="flex-shrink mx-3 text-[10px] font-mono uppercase text-editorial-muted">
-                  Or continue with
-                </span>
-                <div className="flex-grow border-t border-editorial-line"></div>
-              </div>
-
-              <Button
-                type="button"
-                variant="outline"
-                fullWidth
-                size="md"
-                onClick={handleGoogleOAuth}
-              >
-                Sign in with Google (PKCE)
-              </Button>
-            </div>
-          )}
-
-          {/* Quick Demo Access Pills */}
-          <div className="pt-4 border-t border-editorial-line space-y-2">
-            <p className="text-[11px] font-mono text-editorial-muted text-center uppercase tracking-wider">
-              1-Click Demo Evaluation Profiles:
-            </p>
-            <div className="flex flex-wrap items-center justify-center gap-2">
-              <button
-                type="button"
-                onClick={() =>
-                  handleQuickLogin("student@bytehub.io", "STUDENT", "Maya Sen")
-                }
-                className="px-2.5 py-1 text-[11px] font-mono border border-editorial-border bg-canvas hover:border-ink hover:text-ink text-editorial-muted"
-              >
-                Student Demo
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  handleQuickLogin(
-                    "recruiting@hypergrid.io",
-                    "COMPANY",
-                    "HyperGrid Rep"
-                  )
-                }
-                className="px-2.5 py-1 text-[11px] font-mono border border-editorial-border bg-canvas hover:border-ink hover:text-ink text-editorial-muted"
-              >
-                Company Demo
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  handleQuickLogin("admin@bytehub.io", "ADMIN", "Staff Admin")
-                }
-                className="px-2.5 py-1 text-[11px] font-mono border border-editorial-border bg-canvas hover:border-ink hover:text-ink text-editorial-muted"
-              >
-                Admin Demo
-              </button>
-            </div>
-          </div>
         </Card>
       </div>
 
       {/* Colophon Footer */}
       <ColophonFooter className="mt-16" />
     </div>
+  );
+}
+
+export default function AuthPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-canvas flex items-center justify-center font-mono text-xs text-editorial-muted">
+          Loading authentication gateway...
+        </div>
+      }
+    >
+      <AuthForm />
+    </Suspense>
   );
 }

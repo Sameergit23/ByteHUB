@@ -63,6 +63,12 @@ ENV PORT=5000
 RUN addgroup --system --gid 10001 nodejs && \
     adduser --system --uid 10001 express -G nodejs
 
+# Uploaded resumes live outside the image so redeploys keep them. Mount a persistent volume
+# (or disk) at this path in every environment; the non-root user must be able to write to it.
+ENV RESUME_STORAGE_DIR=/app/data/resumes
+RUN mkdir -p /app/data/resumes && chown -R express:nodejs /app/data
+VOLUME ["/app/data/resumes"]
+
 # Copy pruned workspace node_modules
 COPY --from=builder --chown=express:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=express:nodejs /app/packages/shared/dist ./packages/shared/dist

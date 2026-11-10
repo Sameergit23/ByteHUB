@@ -76,6 +76,7 @@ export function verifyStripeWebhookSignature(
 
   for (const part of parts) {
     const [key, value] = part.trim().split("=");
+    if (!key || !value) continue;
     if (key === "t") timestamp = value;
     if (key === "v1") signatures.push(value);
   }
@@ -111,4 +112,3 @@ export function assertAmountIntegrity(
   }
   return true;
 }
-

@@ -6,6 +6,13 @@ import { env } from "../config/env.js";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 
+/** Directory that holds uploaded resumes (RESUME_STORAGE_DIR, or ./storage/vault/resumes). */
+export function getResumeVaultDir(): string {
+  return path.resolve(
+    env.RESUME_STORAGE_DIR || path.join(process.cwd(), "storage/vault/resumes")
+  );
+}
+
 // Magic bytes headers
 const PDF_MAGIC_BYTES = Buffer.from([0x25, 0x50, 0x44, 0x46, 0x2d]); // "%PDF-"
 const DOCX_ZIP_MAGIC_BYTES = Buffer.from([0x50, 0x4b, 0x03, 0x04]); // "PK\x03\x04"
@@ -61,7 +68,7 @@ export function validateFileSignature(buffer: Buffer): FileValidationResult {
  */
 export async function storeResumeInVault(
   buffer: Buffer,
-  originalFilename: string
+  _originalFilename: string
 ): Promise<{ fileKey: string; extension: string; signedUrl: string }> {
   const check = validateFileSignature(buffer);
   if (!check.valid || !check.extension) {
@@ -73,28 +80,72 @@ export async function storeResumeInVault(
   const fileKey = `resumes/${randomId}.${check.extension}`;
 
   // Ensure storage vault folder exists
-  const vaultDir = path.resolve(process.cwd(), "storage/vault/resumes");
+  const vaultDir = getResumeVaultDir();
   await fs.mkdir(vaultDir, { recursive: true });
 
   const destinationPath = path.resolve(vaultDir, `${randomId}.${check.extension}`);
   await fs.writeFile(destinationPath, buffer);
 
-  // Generate 15-minute signed token URL
+  return {
+    fileKey,
+    extension: check.extension,
+    signedUrl: signResumeUrl(fileKey),
+  };
+}
+
+const RESUME_KEY_PATTERN =
+  /^resumes\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(pdf|docx)$/i;
+
+/** True for keys this server issued itself ("resumes/<uuid>.pdf|docx"). */
+export function isValidResumeKey(value: unknown): value is string {
+  return typeof value === "string" && RESUME_KEY_PATTERN.test(value);
+}
+
+/**
+ * Accepts either a bare vault key or one of our signed download URLs and returns the key.
+ * Returns null for anything that did not come from the resume vault.
+ */
+export function extractResumeKey(value: string): string | null {
+  if (isValidResumeKey(value)) return value;
+
+  const match = /[?&]key=([^&]+)/.exec(value || "");
+  if (match?.[1]) {
+    try {
+      const decoded = decodeURIComponent(match[1]);
+      if (isValidResumeKey(decoded)) return decoded;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/** Does the uploaded file for this key still exist in the vault? */
+export async function resumeExists(fileKey: string): Promise<boolean> {
+  if (!isValidResumeKey(fileKey)) return false;
+  const vaultDir = getResumeVaultDir();
+  try {
+    await fs.access(path.resolve(vaultDir, path.basename(fileKey)));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Short-lived (15 minute) signed download URL for a vault key.
+ * Links are minted on demand, so a stored application never holds an expiring URL.
+ */
+export function signResumeUrl(fileKey: string): string {
   const expires = Date.now() + 15 * 60 * 1000;
   const signature = crypto
     .createHmac("sha256", env.JWT_SECRET)
     .update(`${fileKey}:${expires}`)
     .digest("hex");
 
-  const signedUrl = `/api/applications/resume-download?key=${encodeURIComponent(
+  return `/api/applications/resume-download?key=${encodeURIComponent(
     fileKey
   )}&expires=${expires}&signature=${signature}`;
-
-  return {
-    fileKey,
-    extension: check.extension,
-    signedUrl,
-  };
 }
 
 /**
@@ -121,4 +172,3 @@ export function verifySignedResumeUrl(
   if (bufA.length !== bufB.length) return false;
   return crypto.timingSafeEqual(bufA, bufB);
 }
-

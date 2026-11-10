@@ -22,18 +22,18 @@ export const metadata: Metadata = {
   title: "ByteHUB — Real projects. Real mentors. Your first step into tech.",
   description:
     "Learn a skill in a guided training programme, then prove it on a live internship project with verified stipends and ACID transactions.",
+  icons: {
+    icon: [
+      { url: "/favicon.png", sizes: "32x32", type: "image/png" },
+      { url: "/icon.png", sizes: "96x96", type: "image/png" },
+    ],
+    apple: [{ url: "/brand/app-icon.png", sizes: "180x180", type: "image/png" }],
+  },
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html
-      lang="en"
-      className={`${spaceGrotesk.variable} ${inter.variable} antialiased`}
-    >
+    <html lang="en" className={`${spaceGrotesk.variable} ${inter.variable} antialiased`}>
       <body className="min-h-screen flex flex-col bg-canvas text-ink selection:bg-ink selection:text-canvas">
         {/* WCAG Skip-to-content Link */}
         <a

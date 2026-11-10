@@ -3,12 +3,44 @@
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { ByteHubLogo } from "../brand/ByteHubLogo";
+import { getStoredUser, logout, StoredUser } from "../../lib/api";
+
+function dashboardFor(role: StoredUser["role"]): string {
+  if (role === "ADMIN") return "/admin";
+  if (role === "COMPANY") return "/dashboard/company";
+  return "/dashboard/student";
+}
 
 export const Header: React.FC = () => {
   const pathname = usePathname();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const drawerRef = useRef<HTMLDivElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const [user, setUser] = useState<StoredUser | null>(null);
+
+  // Signed-in state is read after mount (it lives in the browser), on every navigation, and
+  // when another tab signs in or out.
+  useEffect(() => {
+    setUser(getStoredUser());
+  }, [pathname]);
+
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === null || e.key === "bytehub_user") setUser(getStoredUser());
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  const handleSignOut = async () => {
+    setDrawerOpen(false);
+    await logout();
+    setUser(null);
+    window.location.href = "/";
+  };
+
+  const firstName = user?.name?.split(" ")[0] || "";
 
   const navLinks = [
     { label: "Internships", href: "/internships" },
@@ -68,13 +100,14 @@ export const Header: React.FC = () => {
   return (
     <header className="w-full bg-canvas border-b border-editorial-border sticky top-0 z-40">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 sm:h-20 flex items-center justify-between">
-        {/* Left: Brand Logo in brackets matching design reference */}
+        {/* Left: Brand Logo matching design reference */}
         <div className="flex items-center">
           <Link
             href="/"
-            className="font-heading font-bold text-lg sm:text-xl text-ink tracking-tight hover:text-accent focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2 min-h-[44px] inline-flex items-center"
+            className="hover:opacity-90 focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2 min-h-[44px] inline-flex items-center transition-opacity"
+            aria-label="ByteHUB Home"
           >
-            [YOUR BRAND]
+            <ByteHubLogo variant="light" size="sm" />
           </Link>
         </div>
 
@@ -103,18 +136,39 @@ export const Header: React.FC = () => {
 
         {/* Right: Actions */}
         <div className="hidden md:flex items-center gap-6">
-          <Link
-            href="/auth?mode=login"
-            className="text-sm font-sans font-semibold text-ink hover:text-accent hover:underline min-h-[44px] min-w-[44px] inline-flex items-center justify-center focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2"
-          >
-            Log in
-          </Link>
-          <Link
-            href="/internships"
-            className="bg-accent text-white px-5 py-2.5 text-sm font-sans font-semibold hover:bg-accent-hover active:bg-[#862410] border border-accent min-h-[44px] inline-flex items-center justify-center focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2 transition-colors"
-          >
-            Apply now
-          </Link>
+          {user ? (
+            <>
+              <button
+                type="button"
+                onClick={handleSignOut}
+                className="text-sm font-sans font-semibold text-editorial-muted hover:text-ink hover:underline min-h-[44px] min-w-[44px] inline-flex items-center justify-center focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2"
+              >
+                Sign out
+              </button>
+              <Link
+                href={dashboardFor(user.role)}
+                aria-label={`Open your dashboard (signed in as ${user.name})`}
+                className="bg-ink text-canvas px-5 py-2.5 text-sm font-sans font-semibold hover:bg-accent border border-ink hover:border-accent min-h-[44px] inline-flex items-center justify-center focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2 transition-colors"
+              >
+                {firstName ? `${firstName} · Dashboard` : "Dashboard"}
+              </Link>
+            </>
+          ) : (
+            <>
+              <Link
+                href="/auth?mode=login"
+                className="text-sm font-sans font-semibold text-ink hover:text-accent hover:underline min-h-[44px] min-w-[44px] inline-flex items-center justify-center focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2"
+              >
+                Log in
+              </Link>
+              <Link
+                href="/internships"
+                className="bg-accent text-white px-5 py-2.5 text-sm font-sans font-semibold hover:bg-accent-hover active:bg-[#862410] border border-accent min-h-[44px] inline-flex items-center justify-center focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2 transition-colors"
+              >
+                Apply now
+              </Link>
+            </>
+          )}
         </div>
 
         {/* Mobile: Hamburger Button */}
@@ -134,7 +188,12 @@ export const Header: React.FC = () => {
               viewBox="0 0 24 24"
               aria-hidden="true"
             >
-              <path strokeLinecap="square" strokeLinejoin="miter" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
+              <path
+                strokeLinecap="square"
+                strokeLinejoin="miter"
+                strokeWidth="2"
+                d="M4 6h16M4 12h16M4 18h16"
+              />
             </svg>
           </button>
         </div>
@@ -153,9 +212,10 @@ export const Header: React.FC = () => {
             <Link
               href="/"
               onClick={() => setDrawerOpen(false)}
-              className="font-heading font-bold text-lg text-ink"
+              className="inline-flex items-center min-h-[44px]"
+              aria-label="ByteHUB Home"
             >
-              [YOUR BRAND]
+              <ByteHubLogo variant="light" size="sm" />
             </Link>
 
             <button
@@ -195,20 +255,41 @@ export const Header: React.FC = () => {
 
             {/* Bottom Actions */}
             <div className="pt-8 space-y-3">
-              <Link
-                href="/internships"
-                onClick={() => setDrawerOpen(false)}
-                className="w-full bg-accent text-white py-3.5 text-center font-sans font-semibold text-base block hover:bg-accent-hover min-h-[44px]"
-              >
-                Apply now
-              </Link>
-              <Link
-                href="/auth?mode=login"
-                onClick={() => setDrawerOpen(false)}
-                className="w-full bg-white border border-editorial-border py-3.5 text-center font-sans font-semibold text-base text-ink block hover:border-ink min-h-[44px]"
-              >
-                Log in
-              </Link>
+              {user ? (
+                <>
+                  <Link
+                    href={dashboardFor(user.role)}
+                    onClick={() => setDrawerOpen(false)}
+                    className="w-full bg-ink text-canvas py-3.5 text-center font-sans font-semibold text-base block hover:bg-accent min-h-[44px]"
+                  >
+                    {firstName ? `${firstName} · Dashboard` : "Dashboard"}
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={handleSignOut}
+                    className="w-full bg-white border border-editorial-border py-3.5 text-center font-sans font-semibold text-base text-ink block hover:border-ink min-h-[44px]"
+                  >
+                    Sign out
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Link
+                    href="/internships"
+                    onClick={() => setDrawerOpen(false)}
+                    className="w-full bg-accent text-white py-3.5 text-center font-sans font-semibold text-base block hover:bg-accent-hover min-h-[44px]"
+                  >
+                    Apply now
+                  </Link>
+                  <Link
+                    href="/auth?mode=login"
+                    onClick={() => setDrawerOpen(false)}
+                    className="w-full bg-white border border-editorial-border py-3.5 text-center font-sans font-semibold text-base text-ink block hover:border-ink min-h-[44px]"
+                  >
+                    Log in
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -216,4 +297,3 @@ export const Header: React.FC = () => {
     </header>
   );
 };
-

@@ -16,10 +16,22 @@ export interface EmailDispatchResult {
   provider: string;
 }
 
+export interface SentEmailRecord {
+  id: string;
+  from: string;
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+  headers: Record<string, string>;
+  sentAt: string;
+  provider: string;
+}
+
 export class EmailService {
   private provider: string;
   private from: string;
-  public sentEmails: Array<any> = [];
+  public sentEmails: SentEmailRecord[] = [];
 
   constructor() {
     this.provider = env.EMAIL_PROVIDER || "MOCK";
@@ -27,10 +39,19 @@ export class EmailService {
   }
 
   async sendMail(params: SendMailParams): Promise<EmailDispatchResult> {
-    const { to, subject, html, text, isNonEssential = false, unsubscribeUrl = "" } = params;
+    const {
+      to,
+      subject,
+      html,
+      text,
+      isNonEssential = false,
+      unsubscribeUrl = "",
+    } = params;
 
     if (!to || !subject || !html) {
-      throw new Error("Missing required email fields: to, subject, and html are required.");
+      throw new Error(
+        "Missing required email fields: to, subject, and html are required."
+      );
     }
 
     const headers: Record<string, string> = {};
@@ -39,7 +60,7 @@ export class EmailService {
       headers["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click";
     }
 
-    const emailRecord = {
+    const emailRecord: SentEmailRecord = {
       id: `mail_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       from: this.from,
       to,
@@ -51,7 +72,10 @@ export class EmailService {
       provider: this.provider,
     };
 
-    if (this.provider === "RESEND" && env.RESEND_API_KEY && env.RESEND_API_KEY !== "re_test_mock_api_key") {
+    const hasRealResendKey =
+      !!env.RESEND_API_KEY && !/mock|placeholder/i.test(env.RESEND_API_KEY);
+
+    if (this.provider === "RESEND" && hasRealResendKey) {
       try {
         const response = await fetch("https://api.resend.com/emails", {
           method: "POST",
@@ -64,6 +88,7 @@ export class EmailService {
             to: [to],
             subject,
             html,
+            ...(text ? { text } : {}),
             headers,
           }),
         });
@@ -74,8 +99,8 @@ export class EmailService {
           throw new Error(`Resend API error: ${response.statusText}`);
         }
 
-        const data: any = await response.json();
-        return { success: true, messageId: data.id, provider: "RESEND" };
+        const data = (await response.json()) as { id?: string };
+        return { success: true, messageId: data.id || "", provider: "RESEND" };
       } catch (err) {
         logger.error({ err }, "Resend dispatch failed, falling back to queued retry");
         throw err;
@@ -84,7 +109,10 @@ export class EmailService {
 
     // Default development / test mock
     this.sentEmails.push(emailRecord);
-    logger.info({ to, subject, messageId: emailRecord.id }, "Dispatched transactional email (Mock)");
+    logger.info(
+      { to, subject, messageId: emailRecord.id },
+      "Dispatched transactional email (Mock)"
+    );
 
     return {
       success: true,

@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from "express";
+import { Request } from "express";
 import rateLimit, { RateLimitRequestHandler } from "express-rate-limit";
 import { env } from "../config/env.js";
 
@@ -12,7 +12,9 @@ const isTest = env.NODE_ENV === "test";
 // 1. Global API Rate Limiter
 export const globalRateLimiter: RateLimitRequestHandler = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: isTest ? 10000 : 100, // 100 requests per 15 mins in production
+  // The web app's own server-side rendering and session keep-alive share this budget,
+  // so it is a flood ceiling rather than a per-action limit.
+  max: isTest ? 10000 : env.RATE_LIMIT_GLOBAL_MAX,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -37,7 +39,8 @@ export const authRateLimiter: RateLimitRequestHandler = rateLimit({
   message: {
     error: {
       code: "AUTH_RATE_LIMITED",
-      message: "Too many authentication attempts. Your IP/account is temporarily throttled for 15 minutes.",
+      message:
+        "Too many authentication attempts. Your IP/account is temporarily throttled for 15 minutes.",
     },
   },
 });
@@ -51,7 +54,8 @@ export const contactRateLimiter: RateLimitRequestHandler = rateLimit({
   message: {
     error: {
       code: "CONTACT_RATE_LIMITED",
-      message: "Too many messages submitted. Please wait 15 minutes before reaching out again.",
+      message:
+        "Too many messages submitted. Please wait 15 minutes before reaching out again.",
     },
   },
 });
@@ -65,7 +69,8 @@ export const uploadRateLimiter: RateLimitRequestHandler = rateLimit({
   message: {
     error: {
       code: "UPLOAD_RATE_LIMITED",
-      message: "Upload rate limit reached. Maximum 10 document uploads allowed per 15-minute window.",
+      message:
+        "Upload rate limit reached. Maximum 10 document uploads allowed per 15-minute window.",
     },
   },
 });
@@ -77,14 +82,14 @@ export const paymentRateLimiter: RateLimitRequestHandler = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req: Request) => {
-    const userId = (req as any).user?.id || req.ip || "unknown";
+    const userId = req.user?.id || req.ip || "unknown";
     return `pay_${userId}`;
   },
   message: {
     error: {
       code: "PAYMENT_RATE_LIMITED",
-      message: "Too many payment orders initiated. Please wait 15 minutes before creating new orders.",
+      message:
+        "Too many payment orders initiated. Please wait 15 minutes before creating new orders.",
     },
   },
 });
-

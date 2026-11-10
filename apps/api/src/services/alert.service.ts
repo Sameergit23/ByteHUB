@@ -7,7 +7,13 @@ export type AlertSeverity = "INFO" | "WARNING" | "CRITICAL";
 export interface SystemAlertPayload {
   title: string;
   severity: AlertSeverity;
-  event: "PAYMENT_FAILURE" | "WEBHOOK_FORGERY" | "DLQ_JOB_FAILED" | "DB_DEGRADATION" | "IDOR_ATTEMPT";
+  event:
+    | "PAYMENT_FAILURE"
+    | "PAYMENT_REVIEW_REQUIRED"
+    | "WEBHOOK_FORGERY"
+    | "DLQ_JOB_FAILED"
+    | "DB_DEGRADATION"
+    | "IDOR_ATTEMPT";
   details: Record<string, unknown>;
   timestamp: string;
 }
@@ -61,7 +67,12 @@ export class AlertService {
     }
   }
 
-  static async notifyPaymentFailure(data: { orderId: string; provider: string; reason: string; amount?: number }): Promise<void> {
+  static async notifyPaymentFailure(data: {
+    orderId: string;
+    provider: string;
+    reason: string;
+    amount?: number;
+  }): Promise<void> {
     await this.sendAlert({
       title: `Payment Capture Failed on ${data.provider}`,
       severity: "CRITICAL",
@@ -70,7 +81,11 @@ export class AlertService {
     });
   }
 
-  static async notifyWebhookForgery(data: { provider: string; ip?: string; receivedSignature: string }): Promise<void> {
+  static async notifyWebhookForgery(data: {
+    provider: string;
+    ip?: string;
+    receivedSignature: string;
+  }): Promise<void> {
     await this.sendAlert({
       title: `Security: Webhook HMAC Signature Forgery Detected on ${data.provider}`,
       severity: "CRITICAL",
@@ -79,7 +94,12 @@ export class AlertService {
     });
   }
 
-  static async notifyDeadLetterQueueJob(data: { queue: string; jobId: string; error: string; attempts: number }): Promise<void> {
+  static async notifyDeadLetterQueueJob(data: {
+    queue: string;
+    jobId: string;
+    error: string;
+    attempts: number;
+  }): Promise<void> {
     await this.sendAlert({
       title: `Background Job Exhausted Retries -> Routed to DLQ (${data.queue})`,
       severity: "WARNING",

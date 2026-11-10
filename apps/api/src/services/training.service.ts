@@ -51,6 +51,93 @@ export class TrainingService {
   }
 
   /**
+   * Public cohort summary for checkout: price, dates, seats and its programme.
+   */
+  async getCohort(cohortId: string) {
+    const cohort = cohortId ? await trainingRepository.findCohortById(cohortId) : null;
+    if (!cohort || !cohort.published || !cohort.programme?.published) {
+      throw AppError.notFound("Cohort not found or is closed for enrolments.");
+    }
+
+    return {
+      id: cohort.id,
+      cohortCode: cohort.cohortCode,
+      name: cohort.name,
+      mode: cohort.mode,
+      startDate: cohort.startDate,
+      endDate: cohort.endDate,
+      durationWeeks: cohort.durationWeeks,
+      seatsTotal: cohort.seatsTotal,
+      seatsLeft: cohort.seatsLeft,
+      priceAmount: cohort.priceAmount,
+      currency: cohort.currency,
+      programme: {
+        id: cohort.programme.id,
+        slug: cohort.programme.slug,
+        title: cohort.programme.title,
+        summary: cohort.programme.summary,
+      },
+    };
+  }
+
+  /**
+   * The signed-in student's enrolments, with week-by-week progress derived from cohort dates.
+   */
+  async listMyEnrollments(userId: string) {
+    const enrollments = await trainingRepository.findEnrollmentsForUser(userId);
+    const now = Date.now();
+
+    return enrollments.map((e) => {
+      const start = new Date(e.cohort.startDate).getTime();
+      const totalWeeks = Math.max(1, e.cohort.durationWeeks);
+      const weeksElapsed = Math.floor((now - start) / (7 * 24 * 60 * 60 * 1000));
+      // Week the cohort is currently in (0 = not started yet).
+      const currentWeek = now < start ? 0 : Math.min(totalWeeks, weeksElapsed + 1);
+      const completedWeeks =
+        e.status === "COMPLETED"
+          ? totalWeeks
+          : Math.max(0, Math.min(totalWeeks, weeksElapsed));
+      const isHoldExpired =
+        e.status === "PENDING" &&
+        !!e.reservedUntil &&
+        new Date(e.reservedUntil).getTime() < now;
+
+      return {
+        id: e.id,
+        status: isHoldExpired ? "EXPIRED" : e.status,
+        reservedUntil: e.reservedUntil,
+        enrolledAt: e.createdAt,
+        progressPercent: Math.round((completedWeeks / totalWeeks) * 100),
+        currentWeek,
+        cohort: {
+          id: e.cohort.id,
+          cohortCode: e.cohort.cohortCode,
+          name: e.cohort.name,
+          mode: e.cohort.mode,
+          startDate: e.cohort.startDate,
+          endDate: e.cohort.endDate,
+          durationWeeks: e.cohort.durationWeeks,
+        },
+        programme: {
+          id: e.cohort.programme.id,
+          slug: e.cohort.programme.slug,
+          title: e.cohort.programme.title,
+          syllabus: e.cohort.programme.syllabus,
+        },
+        certificate: e.certificate
+          ? {
+              id: e.certificate.id,
+              certificateCode: e.certificate.certificateCode,
+              title: e.certificate.title,
+              issuedAt: e.certificate.issuedAt,
+              revokedAt: e.certificate.revokedAt,
+            }
+          : null,
+      };
+    });
+  }
+
+  /**
    * Atomically reserve a seat for 15 minutes or immediately confirm if free.
    */
   async reserveSeat(userId: string, cohortId: string) {
@@ -85,14 +172,15 @@ export class TrainingService {
           programmeSlug: result.cohort.programme?.slug,
         },
       };
-    } catch (err: any) {
-      if (err.message === "SEATS_EXHAUSTED") {
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "";
+      if (message === "SEATS_EXHAUSTED") {
         throw AppError.badRequest(
           "All seats in this cohort have already been filled.",
           "SEATS_EXHAUSTED"
         );
       }
-      if (err.message === "COHORT_NOT_FOUND") {
+      if (message === "COHORT_NOT_FOUND") {
         throw AppError.notFound("Cohort not found or is no longer accepting enrolments.");
       }
       throw err;
@@ -103,7 +191,11 @@ export class TrainingService {
    * Get enrolment summary for checkout.
    * Protects against IDOR: only the enrolled student or an ADMIN can view.
    */
-  async getEnrollmentSummary(enrollmentId: string, requestingUserId: string, requestingRole: string) {
+  async getEnrollmentSummary(
+    enrollmentId: string,
+    requestingUserId: string,
+    requestingRole: string
+  ) {
     const enrollment = await trainingRepository.findEnrollmentById(enrollmentId);
     if (!enrollment) {
       throw AppError.notFound("Enrolment not found.");
@@ -111,7 +203,9 @@ export class TrainingService {
 
     // IDOR protection
     if (enrollment.userId !== requestingUserId && requestingRole !== "ADMIN") {
-      throw AppError.forbidden("Access denied: You cannot view another student's enrolment.");
+      throw AppError.forbidden(
+        "Access denied: You cannot view another student's enrolment."
+      );
     }
 
     const isExpired =

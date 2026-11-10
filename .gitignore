@@ -12,3 +12,5 @@ coverage/
 .DS_Store
 *.tsbuildinfo
 
+# Uploaded resumes and other local file storage (personal data)
+apps/api/storage/

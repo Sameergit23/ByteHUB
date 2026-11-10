@@ -37,8 +37,10 @@ function baseLayout(title, contentHtml, isNonEssential = false, unsubscribeUrl =
             <!-- Header -->
             <tr>
               <td class="header">
-                <a href="https://bytehub.dev" class="brand">[ByteHUB]</a>
-                <div class="tagline">Talent Infrastructure & Training Programmes</div>
+                <a href="https://bytehub.dev" class="brand" style="text-decoration: none; font-weight: 800; font-size: 22px; letter-spacing: -0.5px;">
+                  <span style="color: #0A1128;">Byte</span><span style="color: #2563EB;">HUB</span>
+                </a>
+                <div class="tagline" style="font-family: monospace; font-size: 10px; letter-spacing: 2.5px; color: #5A574D; margin-top: 4px;">TRAIN. INTERN. LAUNCH.</div>
               </td>
             </tr>
             <!-- Main Content -->
@@ -50,7 +52,7 @@ function baseLayout(title, contentHtml, isNonEssential = false, unsubscribeUrl =
             <!-- Footer -->
             <tr>
               <td class="footer">
-                <div>[ByteHUB] · Bangalore, India</div>
+                <div>ByteHUB · Bangalore, India</div>
                 <div style="margin-top: 4px;">admissions@bytehub.dev · Security & Integrity SLA</div>
                 ${
                   isNonEssential && unsubscribeUrl
@@ -142,9 +144,9 @@ export function renderPaymentReceiptHtml(studentName, programmeTitle, cohortCode
       <div><strong>Amount Paid:</strong> <span style="color: #B8341A; font-weight: bold;">${amountFormatted}</span></div>
       <div><strong>Status:</strong> PAID / SEAT ACTIVE</div>
     </div>
-    <p class="notice">[GST DETAILS: SAC Code 999293 - Placeholder GSTIN 29AAAAA0000A1Z5. Consult accountant before filing.]</p>
+    <p class="notice">Official Receipt / Bill of Supply — GST Exempt (Turnover below statutory threshold under Section 22 of the CGST Act, 2017).</p>
     <div style="margin: 20px 0;">
-      <a href="https://bytehub.dev/api/payments/${orderId}/invoice" class="btn" target="_blank">Download Tax Invoice (PDF) →</a>
+      <a href="https://bytehub.dev/api/payments/${orderId}/invoice" class="btn" target="_blank">Download Payment Receipt (PDF) →</a>
     </div>
   `;
   return baseLayout("Payment Receipt: " + orderId, content);

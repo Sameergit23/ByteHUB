@@ -1,12 +1,19 @@
 import { Router, raw } from "express";
 import { PaymentController } from "../controllers/payment.controller.js";
 import { authenticateJWT, requireRoles } from "../middleware/auth.js";
+import { paymentRateLimiter } from "../middleware/rateLimiter.js";
 
-export const paymentsRouter = Router();
+export const paymentsRouter: Router = Router();
 
 // ---------------------------------------------------------------------------
 // 1. Webhooks (Mount express.raw for raw body verification; CSRF bypassed)
 // ---------------------------------------------------------------------------
+paymentsRouter.post(
+  "/webhooks/cashfree",
+  raw({ type: "*/*" }),
+  PaymentController.cashfreeWebhook
+);
+
 paymentsRouter.post(
   "/webhooks/razorpay",
   raw({ type: "*/*" }),
@@ -22,10 +29,18 @@ paymentsRouter.post(
 // ---------------------------------------------------------------------------
 // 2. Client Payment Creation & Checkout
 // ---------------------------------------------------------------------------
+// Order creation is the abuse-sensitive step, so it carries the strict per-user limit.
 paymentsRouter.post(
   "/create-intent",
   authenticateJWT,
+  paymentRateLimiter,
   PaymentController.createIntent
+);
+
+paymentsRouter.post(
+  "/cashfree/verify-client",
+  authenticateJWT,
+  PaymentController.verifyCashfreeClient
 );
 
 paymentsRouter.post(
@@ -37,11 +52,9 @@ paymentsRouter.post(
 // ---------------------------------------------------------------------------
 // 3. Status Polling & Invoices (Source of truth is polling our verified state)
 // ---------------------------------------------------------------------------
-paymentsRouter.get(
-  "/status/:orderId",
-  authenticateJWT,
-  PaymentController.getStatus
-);
+paymentsRouter.get("/my", authenticateJWT, PaymentController.listMine);
+
+paymentsRouter.get("/status/:orderId", authenticateJWT, PaymentController.getStatus);
 
 paymentsRouter.get(
   "/:orderId/invoice",

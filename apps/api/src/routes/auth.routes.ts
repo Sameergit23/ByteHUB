@@ -12,7 +12,7 @@ import {
   EmailVerificationConfirmSchema,
 } from "@bytehub/shared";
 
-export const authRouter = Router();
+export const authRouter: Router = Router();
 
 authRouter.post(
   "/register",
@@ -32,17 +32,9 @@ authRouter.post("/refresh", AuthController.refresh);
 
 authRouter.post("/logout", AuthController.logout);
 
-authRouter.post(
-  "/logout-all",
-  authenticateJWT,
-  AuthController.logoutEverywhere
-);
+authRouter.post("/logout-all", authenticateJWT, AuthController.logoutEverywhere);
 
-authRouter.get(
-  "/sessions",
-  authenticateJWT,
-  AuthController.sessions
-);
+authRouter.get("/sessions", authenticateJWT, AuthController.sessions);
 
 authRouter.post(
   "/forgot-password",
@@ -73,20 +65,8 @@ authRouter.post(
 
 authRouter.get("/oauth/google/start", AuthController.googleOAuthStart);
 
-authRouter.get(
-  "/me",
-  authenticateJWT,
-  AuthController.getMe
-);
+authRouter.get("/me", authenticateJWT, AuthController.getMe);
 
-authRouter.get(
-  "/me/export",
-  authenticateJWT,
-  AuthController.exportData
-);
+authRouter.get("/me/export", authenticateJWT, AuthController.exportData);
 
-authRouter.delete(
-  "/me",
-  authenticateJWT,
-  AuthController.deleteAccount
-);
+authRouter.delete("/me", authenticateJWT, AuthController.deleteAccount);

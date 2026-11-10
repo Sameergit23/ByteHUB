@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Card } from "../../components/ui/Card";
 import { ColophonFooter } from "../../components/layout/ColophonFooter";
-import { MOCK_TRAINING_PROGRAMS } from "../../lib/mockData";
+import { getProgrammes } from "../../lib/catalog";
 
 export const metadata: Metadata = {
   title: "Training Programmes — ByteHUB",
@@ -14,21 +14,30 @@ export const metadata: Metadata = {
   },
 };
 
-export default function TrainingPage({
+export default async function TrainingPage({
   searchParams,
 }: {
   searchParams?: {
     track?: string;
   };
 }) {
-  const selectedTrack = searchParams?.track || "All";
+  const selectedTrack = searchParams?.track || "all";
 
-  const categories = ["All", "Web", "App", "Data & AI", "Design"] as const;
+  const programmes = await getProgrammes();
+  const isUnavailable = programmes === null;
+  const allProgrammes = programmes ?? [];
 
-  const filtered = MOCK_TRAINING_PROGRAMS.filter((prog) => {
-    if (selectedTrack === "All") return true;
-    return prog.trackCategory === selectedTrack;
-  });
+  // Filter pills are built from the tracks that actually have programmes.
+  const trackBySlug = new Map<string, string>();
+  allProgrammes.forEach((prog) => trackBySlug.set(prog.trackSlug, prog.trackName));
+  const categories = [
+    { slug: "all", label: "All" },
+    ...Array.from(trackBySlug, ([slug, label]) => ({ slug, label })),
+  ];
+
+  const filtered = allProgrammes.filter(
+    (prog) => selectedTrack === "all" || prog.trackSlug === selectedTrack
+  );
 
   return (
     <div className="w-full bg-canvas min-h-screen py-12 sm:py-16">
@@ -52,22 +61,42 @@ export default function TrainingPage({
           className="flex flex-wrap items-center gap-2 pt-2"
         >
           {categories.map((cat) => {
-            const isActive = selectedTrack === cat;
+            const isActive = selectedTrack === cat.slug;
             return (
               <Link
-                key={cat}
-                href={cat === "All" ? "/training" : `/training?track=${encodeURIComponent(cat)}`}
+                key={cat.slug}
+                href={
+                  cat.slug === "all"
+                    ? "/training"
+                    : `/training?track=${encodeURIComponent(cat.slug)}`
+                }
                 className={`min-h-[44px] px-4 py-2 text-xs font-sans font-semibold border transition-colors inline-flex items-center justify-center ${
                   isActive
                     ? "bg-[#16150F] text-white border-[#16150F]"
                     : "bg-white text-ink border-editorial-border hover:border-ink"
                 }`}
               >
-                {cat}
+                {cat.label}
               </Link>
             );
           })}
         </nav>
+
+        {isUnavailable && (
+          <div
+            role="alert"
+            className="p-4 border border-accent bg-[#FBEBE8] text-accent text-xs font-mono"
+          >
+            [ NOTICE ]: Programmes could not be loaded right now. Please refresh in a
+            moment.
+          </div>
+        )}
+
+        {!isUnavailable && filtered.length === 0 && (
+          <div className="p-6 border border-editorial-border bg-white text-sm text-editorial-muted">
+            No programmes are open in this track yet.
+          </div>
+        )}
 
         {/* 6 Grid Cards Matching Image 5 */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pt-4">

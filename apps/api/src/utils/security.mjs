@@ -115,6 +115,19 @@ export async function verifyPassword(password, storedHash) {
     });
   }
 
+  if (storedHash.startsWith("$2a$") || storedHash.startsWith("$2b$")) {
+    try {
+      const bcryptModule = await import("bcryptjs");
+      const compare = bcryptModule.default?.compare || bcryptModule.compare;
+      if (typeof compare === "function") {
+        return await compare(password, storedHash);
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
   return false;
 }
 

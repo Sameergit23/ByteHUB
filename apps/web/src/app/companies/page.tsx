@@ -8,6 +8,7 @@ import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
 import { Textarea } from "../../components/ui/Textarea";
 import { ColophonFooter } from "../../components/layout/ColophonFooter";
+import { apiFetch, ApiError } from "../../lib/api";
 
 export default function CompaniesPage() {
   const [formData, setFormData] = useState({
@@ -36,7 +37,8 @@ export default function CompaniesPage() {
     if (formData._hp) {
       setStatus({
         success: true,
-        message: "Your inquiry has been received. Our team will review and respond shortly.",
+        message:
+          "Your inquiry has been received. Our team will review and respond shortly.",
       });
       return;
     }
@@ -45,16 +47,17 @@ export default function CompaniesPage() {
     setStatus(null);
 
     try {
-      // Post to contact / inquiry endpoint with fallback simulation
-      await fetch("/api/inquiries", {
+      // The inquiry is only reported as received once the server has stored it.
+      const { _hp: _honeypot, ...inquiry } = formData;
+      await apiFetch("/inquiries", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      }).catch(() => null);
+        body: JSON.stringify(inquiry),
+      });
 
       setStatus({
         success: true,
-        message: "Thank you. Your role specification has been submitted. An engineering talent partner will reach out within 24 hours.",
+        message:
+          "Thank you. Your role specification has been submitted. An engineering talent partner will reach out within 24 hours.",
       });
       setFormData({
         companyName: "",
@@ -68,10 +71,15 @@ export default function CompaniesPage() {
         notes: "",
         _hp: "",
       });
-    } catch {
+    } catch (err) {
       setStatus({
-        success: true,
-        message: "Your inquiry has been received. Our partnerships desk will respond within one business day.",
+        success: false,
+        message:
+          err instanceof ApiError && err.status === 429
+            ? "Too many inquiries sent from this connection. Please wait 15 minutes before trying again."
+            : err instanceof ApiError && err.status === 400
+              ? err.message
+              : "Your inquiry could not be sent. Please try again in a moment.",
       });
     } finally {
       setIsSubmitting(false);
@@ -90,7 +98,9 @@ export default function CompaniesPage() {
             Hire trained, project-proven interns.
           </h1>
           <p className="font-sans text-base sm:text-lg text-editorial-muted leading-relaxed pt-2">
-            Skip screening hundreds of unverified resumes. ByteHUB trains students on production codebases and pairs you with candidates who have already shipped work.
+            Skip screening hundreds of unverified resumes. ByteHUB trains students on
+            production codebases and pairs you with candidates who have already shipped
+            work.
           </p>
           <div className="pt-4 flex flex-wrap gap-4">
             <a href="#submit-role">
@@ -118,7 +128,8 @@ export default function CompaniesPage() {
                 Vetted code proof
               </h3>
               <p className="font-sans text-sm text-editorial-muted leading-relaxed">
-                Every candidate has completed production tasks with strict TypeScript and peer code reviews before you ever interview them.
+                Every candidate has completed production tasks with strict TypeScript and
+                peer code reviews before you ever interview them.
               </p>
             </Card>
 
@@ -128,7 +139,8 @@ export default function CompaniesPage() {
                 7-day hiring cadence
               </h3>
               <p className="font-sans text-sm text-editorial-muted leading-relaxed">
-                Specify your requirements, review 3 shortlisted candidate dossiers within 48 hours, and extend an offer by day 7.
+                Specify your requirements, review 3 shortlisted candidate dossiers within
+                48 hours, and extend an offer by day 7.
               </p>
             </Card>
 
@@ -138,7 +150,8 @@ export default function CompaniesPage() {
                 Zero risk guarantee
               </h3>
               <p className="font-sans text-sm text-editorial-muted leading-relaxed">
-                If an intern is not the right fit in their first two weeks, we replace them or refund your platform fee immediately.
+                If an intern is not the right fit in their first two weeks, we replace
+                them or refund your platform fee immediately.
               </p>
             </Card>
           </div>
@@ -160,7 +173,8 @@ export default function CompaniesPage() {
                 Post role requirements
               </h3>
               <p className="font-sans text-sm text-editorial-muted leading-relaxed">
-                Specify your technical stack, internship duration (8–24 weeks), and mentor capacity.
+                Specify your technical stack, internship duration (8–24 weeks), and mentor
+                capacity.
               </p>
             </div>
 
@@ -170,7 +184,8 @@ export default function CompaniesPage() {
                 Review pre-evaluated candidates
               </h3>
               <p className="font-sans text-sm text-editorial-muted leading-relaxed">
-                Receive top 3 candidates with verified code samples, test coverage metrics, and mentor evaluations.
+                Receive top 3 candidates with verified code samples, test coverage
+                metrics, and mentor evaluations.
               </p>
             </div>
 
@@ -180,7 +195,8 @@ export default function CompaniesPage() {
                 Onboard and start shipping
               </h3>
               <p className="font-sans text-sm text-editorial-muted leading-relaxed">
-                Bring them onto your team with zero agency markup and continuous ByteHUB check-ins.
+                Bring them onto your team with zero agency markup and continuous ByteHUB
+                check-ins.
               </p>
             </div>
           </div>
@@ -196,12 +212,13 @@ export default function CompaniesPage() {
               Submit your hiring requirements
             </h2>
             <p className="font-sans text-sm text-editorial-muted max-w-2xl">
-              Fill in your role details. Our employer partnerships desk will review your requirements and follow up with candidate dossiers.
+              Fill in your role details. Our employer partnerships desk will review your
+              requirements and follow up with candidate dossiers.
             </p>
           </div>
 
           <Card padding="lg" className="max-w-3xl">
-            {status ? (
+            {status?.success ? (
               <div
                 role="status"
                 className="p-6 border border-ink bg-canvas space-y-3 font-sans"
@@ -220,6 +237,15 @@ export default function CompaniesPage() {
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-6">
+                {status && !status.success && (
+                  <div
+                    role="alert"
+                    className="p-3 border border-accent bg-[#FBEBE8] text-accent text-xs font-mono"
+                  >
+                    [ ALERT ]: {status.message}
+                  </div>
+                )}
+
                 {/* Honeypot field (hidden from sighted users) */}
                 <input
                   type="text"
@@ -281,9 +307,7 @@ export default function CompaniesPage() {
                   <Select
                     label="Track"
                     value={formData.track}
-                    onChange={(e) =>
-                      setFormData({ ...formData, track: e.target.value })
-                    }
+                    onChange={(e) => setFormData({ ...formData, track: e.target.value })}
                     options={[
                       { value: "Web Development", label: "Web Development" },
                       { value: "App Development", label: "App Development" },
@@ -295,9 +319,7 @@ export default function CompaniesPage() {
                   <Select
                     label="Work Mode"
                     value={formData.mode}
-                    onChange={(e) =>
-                      setFormData({ ...formData, mode: e.target.value })
-                    }
+                    onChange={(e) => setFormData({ ...formData, mode: e.target.value })}
                     options={[
                       { value: "Remote", label: "Remote" },
                       { value: "Hybrid", label: "Hybrid" },
@@ -333,9 +355,7 @@ export default function CompaniesPage() {
                   rows={4}
                   placeholder="Briefly describe the projects the intern will work on and any specific prerequisite requirements..."
                   value={formData.notes}
-                  onChange={(e) =>
-                    setFormData({ ...formData, notes: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                 />
 
                 <div>
@@ -382,4 +402,3 @@ export default function CompaniesPage() {
     </div>
   );
 }
-

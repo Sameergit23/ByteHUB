@@ -55,23 +55,37 @@ export function generateInvoiceData(params: InvoiceParams): InvoiceData {
     paidAt = new Date(),
   } = params;
 
-  const invoiceNumber = `INV-${new Date().getFullYear()}-${orderId.replace(/[^a-zA-Z0-9]/g, "").slice(-8).toUpperCase()}`;
+  const invoiceNumber = `INV-${new Date().getFullYear()}-${orderId
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .slice(-8)
+    .toUpperCase()}`;
 
+  const hasGstin = Boolean(process.env.GSTIN && process.env.GSTIN.trim().length > 5);
   const isINR = currency === "INR";
   const totalMajor = (amount / 100).toFixed(2);
-  const baseMajor = isINR ? (amount / 1.18 / 100).toFixed(2) : totalMajor;
-  const taxMajor = isINR ? (Number(totalMajor) - Number(baseMajor)).toFixed(2) : "0.00";
+  const baseMajor = isINR && hasGstin ? (amount / 1.18 / 100).toFixed(2) : totalMajor;
+  const taxMajor =
+    isINR && hasGstin ? (Number(totalMajor) - Number(baseMajor)).toFixed(2) : "0.00";
   const halfTax = (Number(taxMajor) / 2).toFixed(2);
 
-  const gstDisclosures = [
-    "[GST DETAILS: Educational & Professional Training Services - SAC Code 999293]",
-    "ByteHUB Entity GSTIN: [29AAAAA0000A1Z5 - PLACEHOLDER]",
-    "State of Supply: [Karnataka (29) / Inter-state as applicable]",
-    isINR
-      ? `Base Tuition: ₹${baseMajor} | CGST 9%: ₹${halfTax} | SGST 9%: ₹${halfTax} | Total Paid: ₹${totalMajor}`
-      : `Tuition Fee: $${totalMajor} (International card transaction, zero-rated export of service)`,
-    "IMPORTANT NOTICE: Tax calculation shown is a placeholder. ByteHUB administration must confirm exact GST registration, state thresholds, and invoicing compliances with a certified chartered accountant.",
-  ];
+  const gstDisclosures = hasGstin
+    ? [
+        "GST Classification: Educational & Professional Training Services - SAC Code 999293",
+        `ByteHUB Registered Entity: ${process.env.COMPANY_NAME || "ByteHUB Technologies"}`,
+        `Entity GSTIN: ${process.env.GSTIN}`,
+        `State of Supply: ${process.env.COMPANY_STATE || "Karnataka"}`,
+        isINR
+          ? `Base Tuition: ₹${baseMajor} | CGST 9%: ₹${halfTax} | SGST 9%: ₹${halfTax} | Total Paid: ₹${totalMajor}`
+          : `Tuition Fee: $${totalMajor} (International card transaction, zero-rated export of service)`,
+        "Official tax invoice generated for enrollment under ByteHUB Technical Training Terms of Service.",
+      ]
+    : [
+        "Bill of Supply / Official Enrolment Receipt",
+        "GST Status: Not Applicable (Aggregate annual turnover is below the statutory threshold under Section 22 of the CGST Act 2017).",
+        `Tuition Fee Paid: ${isINR ? `₹${totalMajor}` : `$${totalMajor}`}`,
+        "Taxes (GST): ₹0.00 (Exempt — Small Enterprise below registration threshold)",
+        "Official payment receipt generated for enrollment under ByteHUB Technical Training Terms of Service.",
+      ];
 
   return {
     invoiceNumber,
@@ -146,7 +160,7 @@ BT
 0 -15 Td
 (Payment Reference: ${invoice.paymentAudit.gatewayPaymentId}) Tj
 0 -35 Td
-([GST DETAILS: SAC Code 999293 - Placeholder GSTIN 29AAAAA0000A1Z5]) Tj
+(${process.env.GSTIN && process.env.GSTIN.trim().length > 5 ? `GSTIN: ${process.env.GSTIN}` : "Bill of Supply - GST Exempt under Sec 22 CGST Act"}) Tj
 0 -15 Td
 (Base: ${invoice.financials.baseTuition} | Tax: ${invoice.financials.taxAmount} | Total: ${invoice.financials.totalFormatted}) Tj
 0 -20 Td
@@ -174,4 +188,3 @@ startxref
 
   return Buffer.from(content, "utf8");
 }
-

@@ -1,9 +1,37 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
-import { apiFetch, getStoredUser } from "../../../../lib/api";
+import { useParams } from "next/navigation";
+import { apiFetch, ApiError, getStoredUser, redirectToLogin } from "../../../../lib/api";
+import { formatDate, formatMoney } from "../../../../lib/format";
+import { ByteHubLogo } from "../../../../components/brand/ByteHubLogo";
+import { siteConfig } from "../../../../lib/siteConfig";
+
+interface CohortSummary {
+  id: string;
+  cohortCode: string;
+  name: string;
+  mode: string;
+  startDate: string;
+  durationWeeks: number;
+  seatsLeft: number;
+  priceAmount: number;
+  currency: string;
+  programme: { id: string; slug: string; title: string; summary: string };
+}
+
+interface PaymentOrder {
+  orderId: string;
+  amount: number;
+  currency: string;
+  provider: string;
+  status: string;
+  paymentSessionId?: string;
+  cashfreeEnv?: "PRODUCTION" | "SANDBOX";
+  isTestMode?: boolean;
+  reservedUntil?: string | null;
+}
 
 interface PaymentStatusResponse {
   orderId: string;
@@ -11,12 +39,7 @@ interface PaymentStatusResponse {
   isPaid: boolean;
   amount: number;
   currency: string;
-  provider: "RAZORPAY" | "STRIPE";
-  enrollment?: {
-    id: string;
-    status: string;
-    cohortId: string;
-  };
+  provider: "CASHFREE" | "RAZORPAY" | "STRIPE";
   invoice?: {
     invoiceNumber: string;
     issueDate: string;
@@ -24,40 +47,82 @@ interface PaymentStatusResponse {
       gstNotice: string;
       accountantReminder: string;
     };
-  };
+  } | null;
 }
+
+/* eslint-disable @typescript-eslint/no-explicit-any -- Cashfree's browser SDK ships no types */
+
+function loadCashfreeSdk(): Promise<any | null> {
+  return new Promise((resolve) => {
+    const existing = (window as any).Cashfree;
+    if (existing) return resolve(existing);
+
+    const script = document.createElement("script");
+    script.src = "https://sdk.cashfree.com/js/v3/cashfree.js";
+    script.async = true;
+    script.onload = () => resolve((window as any).Cashfree || null);
+    script.onerror = () => resolve(null);
+    document.body.appendChild(script);
+  });
+}
+
+const newIdempotencyKey = () =>
+  `bh_pay_${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Date.now()}`;
 
 export default function TrainingCheckoutPage() {
   const params = useParams();
-  const router = useRouter();
-  const cohortId = (params?.id as string) || "cohort-web-01";
+  const cohortId = (params?.id as string) || "";
 
-  const [provider, setProvider] = useState<"RAZORPAY" | "STRIPE">("RAZORPAY");
-  const [secondsRemaining, setSecondsRemaining] = useState<number>(15 * 60);
+  const [cohort, setCohort] = useState<CohortSummary | null>(null);
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "not_found" | "error">(
+    "loading"
+  );
+
   const [isProcessing, setIsProcessing] = useState(false);
-  const [orderCreated, setOrderCreated] = useState<{
-    orderId: string;
-    amount: number;
-    currency: string;
-    provider: string;
-    keyId?: string;
-    publishableKey?: string;
-    clientSecret?: string;
-    programmeTitle?: string;
-  } | null>(null);
-
+  const [order, setOrder] = useState<PaymentOrder | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatusResponse | null>(null);
-  const [pollingActive, setPollingActive] = useState(false);
+  const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [secondsRemaining, setSecondsRemaining] = useState<number | null>(null);
 
-  // 15-Minute Countdown Timer
+  // One key per payment attempt: repeating the request (double click, retry after closing the
+  // payment window) returns the same order instead of creating a second one.
+  const idempotencyKey = useRef<string>(newIdempotencyKey());
+
+  // Load the cohort being purchased
   useEffect(() => {
-    if (secondsRemaining <= 0 || paymentStatus?.isPaid) return;
-    const timer = setInterval(() => {
-      setSecondsRemaining((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
+    if (!cohortId) return;
+    let cancelled = false;
+
+    apiFetch<{ data: CohortSummary }>(`/training/cohorts/${encodeURIComponent(cohortId)}`)
+      .then((res) => {
+        if (cancelled) return;
+        setCohort(res.data);
+        setLoadState("ready");
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setLoadState(
+          err instanceof ApiError && err.status === 404 ? "not_found" : "error"
+        );
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [cohortId]);
+
+  // Countdown for the 15-minute seat hold (starts once the server has reserved the seat)
+  useEffect(() => {
+    if (!order?.reservedUntil || paymentStatus?.isPaid) return;
+    const deadline = new Date(order.reservedUntil).getTime();
+
+    const tick = () =>
+      setSecondsRemaining(Math.max(0, Math.round((deadline - Date.now()) / 1000)));
+    tick();
+    const timer = setInterval(tick, 1000);
     return () => clearInterval(timer);
-  }, [secondsRemaining, paymentStatus?.isPaid]);
+  }, [order?.reservedUntil, paymentStatus?.isPaid]);
 
   const formatTimer = (secs: number) => {
     const mins = Math.floor(secs / 60);
@@ -65,32 +130,52 @@ export default function TrainingCheckoutPage() {
     return `${mins.toString().padStart(2, "0")}:${remainingSecs.toString().padStart(2, "0")}`;
   };
 
-  // Poll for webhook confirmation (Source of truth is the verified webhook)
-  useEffect(() => {
-    if (!pollingActive || !orderCreated?.orderId || paymentStatus?.isPaid) return;
+  /**
+   * Asks the server whether the order is paid. The server re-checks with Cashfree itself;
+   * nothing shown on this page is taken from the browser's word.
+   */
+  const confirmWithServer = useCallback(async (orderId: string): Promise<boolean> => {
+    setAwaitingConfirmation(true);
 
-    const interval = setInterval(async () => {
+    // The gateway can take a few seconds to settle, so poll briefly before giving up.
+    for (let attempt = 0; attempt < 10; attempt++) {
       try {
-        const res = await apiFetch<any>(`/payments/status/${orderCreated.orderId}`);
-        if (res?.data) {
+        await apiFetch("/payments/cashfree/verify-client", {
+          method: "POST",
+          body: JSON.stringify({ orderId }),
+        });
+        const res = await apiFetch<{ data: PaymentStatusResponse }>(
+          `/payments/status/${encodeURIComponent(orderId)}`
+        );
+        if (res.data.isPaid) {
           setPaymentStatus(res.data);
-          if (res.data.isPaid || res.data.status === "FAILED") {
-            setPollingActive(false);
-            setIsProcessing(false);
-          }
+          setAwaitingConfirmation(false);
+          return true;
         }
-      } catch {
-        // Continue polling until timeout or success
+        if (res.data.status === "FAILED") break;
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 401) {
+          redirectToLogin();
+          return false;
+        }
       }
-    }, 2000);
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+    }
 
-    return () => clearInterval(interval);
-  }, [pollingActive, orderCreated?.orderId, paymentStatus?.isPaid]);
+    setAwaitingConfirmation(false);
+    return false;
+  }, []);
 
   const handleInitiatePayment = async () => {
     const user = getStoredUser();
     if (!user) {
-      router.push(`/auth?mode=login&redirect=/training/checkout/${cohortId}`);
+      redirectToLogin(`/training/checkout/${cohortId}`);
+      return;
+    }
+    if (user.role === "COMPANY") {
+      setErrorMessage(
+        "Company accounts cannot enrol in training. Sign in with a student account."
+      );
       return;
     }
 
@@ -98,144 +183,147 @@ export default function TrainingCheckoutPage() {
     setErrorMessage(null);
 
     try {
-      const idempotencyKey = `bh_pay_${user.id}_${cohortId}_${Date.now()}`;
-
-      // 1. Server decides amount and currency from PostgreSQL Cohort model
-      const res = await apiFetch<any>("/payments/create-intent", {
+      // 1. The server reserves the seat and decides the amount from its own database.
+      const res = await apiFetch<{ data: PaymentOrder }>("/payments/create-intent", {
         method: "POST",
-        headers: {
-          "X-Idempotency-Key": idempotencyKey,
-        },
+        headers: { "X-Idempotency-Key": idempotencyKey.current },
         body: JSON.stringify({
           cohortId,
-          provider,
-          idempotencyKey,
+          provider: "CASHFREE",
+          idempotencyKey: idempotencyKey.current,
         }),
       });
 
       const orderData = res.data;
-      setOrderCreated(orderData);
+      // A repeated request returns the same order without the hold time; keep the one we have.
+      setOrder((prev) => ({
+        ...orderData,
+        reservedUntil: orderData.reservedUntil ?? prev?.reservedUntil ?? null,
+      }));
 
-      if (provider === "RAZORPAY") {
-        // Open Razorpay Standard Checkout in test mode
-        if (typeof window !== "undefined" && (window as any).Razorpay) {
-          const options = {
-            key: orderData.keyId || "rzp_test_placeholder_key",
-            amount: orderData.amount,
-            currency: orderData.currency,
-            name: "ByteHUB Education",
-            description: orderData.programmeTitle || "Cohort Enrolment Fee",
-            order_id: orderData.orderId,
-            handler: async (response: any) => {
-              // Client modal succeeded, trigger backend client verification
-              await apiFetch("/payments/razorpay/verify-client", {
-                method: "POST",
-                body: JSON.stringify({
-                  orderId: orderData.orderId,
-                  razorpayPaymentId: response.razorpay_payment_id,
-                  razorpaySignature: response.razorpay_signature,
-                }),
-              }).catch(() => {});
+      if (orderData.status === "PAID") {
+        await confirmWithServer(orderData.orderId);
+        return;
+      }
 
-              // Start polling our API for the webhook capture confirmation (source of truth)
-              setPollingActive(true);
-            },
-            prefill: {
-              name: user.name || "Student",
-              email: user.email,
-            },
-            theme: {
-              color: "#B8341A",
-            },
-          };
+      // 2. Local development without gateway keys: the API runs a labelled test mode and
+      //    confirms the order itself. This branch cannot occur against a production API.
+      if (orderData.isTestMode) {
+        const paid = await confirmWithServer(orderData.orderId);
+        if (!paid)
+          setErrorMessage("The test payment could not be confirmed. Please retry.");
+        return;
+      }
 
-          const rzpInstance = new (window as any).Razorpay(options);
-          rzpInstance.open();
-        } else {
-          // Simulation mode for headless test / demo environment
-          // Automatically trigger mock webhook capture for full end-to-end verification
-          setPollingActive(true);
-          setTimeout(async () => {
-            // Trigger test confirmation
-            setPaymentStatus({
-              orderId: orderData.orderId,
-              status: "PAID",
-              isPaid: true,
-              amount: orderData.amount,
-              currency: orderData.currency,
-              provider: "RAZORPAY",
-              invoice: {
-                invoiceNumber: `INV-2026-${orderData.orderId.slice(-6).toUpperCase()}`,
-                issueDate: new Date().toISOString(),
-                legalAndTax: {
-                  gstNotice:
-                    "[GST DETAILS: Educational & Professional Training Services - SAC Code 999293]",
-                  accountantReminder:
-                    "Confirm tax requirements with accountant before production filing.",
-                },
-              },
-            });
-            setIsProcessing(false);
-          }, 2500);
-        }
-      } else {
-        // Stripe International flow
-        setPollingActive(true);
-        setTimeout(() => {
-          setPaymentStatus({
-            orderId: orderData.orderId,
-            status: "PAID",
-            isPaid: true,
-            amount: orderData.amount,
-            currency: orderData.currency,
-            provider: "STRIPE",
-            invoice: {
-              invoiceNumber: `INV-2026-${orderData.orderId.slice(-6).toUpperCase()}`,
-              issueDate: new Date().toISOString(),
-              legalAndTax: {
-                gstNotice:
-                  "[GST DETAILS: International card transaction - Zero rated export]",
-                accountantReminder:
-                  "Confirm tax requirements with accountant before production filing.",
-              },
-            },
-          });
-          setIsProcessing(false);
-        }, 2500);
+      // 3. Real payment: open Cashfree's hosted checkout.
+      if (!orderData.paymentSessionId) {
+        throw new Error(
+          "The payment gateway did not return a checkout session. Please retry."
+        );
+      }
+
+      const Cashfree = await loadCashfreeSdk();
+      if (!Cashfree) {
+        throw new Error(
+          "The secure payment window could not be loaded. Check your connection or disable any content blocker, then retry."
+        );
+      }
+
+      const cashfree = Cashfree({
+        mode: orderData.cashfreeEnv === "PRODUCTION" ? "production" : "sandbox",
+      });
+
+      const result = await cashfree.checkout({
+        paymentSessionId: orderData.paymentSessionId,
+        redirectTarget: "_modal",
+      });
+
+      // 4. Whatever the window reports, the server has the final say.
+      const paid = await confirmWithServer(orderData.orderId);
+      if (!paid) {
+        setErrorMessage(
+          result?.error?.message
+            ? `Payment was not completed: ${result.error.message}`
+            : "Payment was not completed. No money has been taken — you can try again while your seat is held."
+        );
       }
     } catch (err: any) {
+      if (err instanceof ApiError && err.status === 401) {
+        redirectToLogin(`/training/checkout/${cohortId}`);
+        return;
+      }
+      // A fresh key lets the next click start a clean attempt after a hard failure.
+      idempotencyKey.current = newIdempotencyKey();
+      setErrorMessage(err?.message || "Failed to initiate payment. Please retry.");
+    } finally {
       setIsProcessing(false);
-      setErrorMessage(err.message || "Failed to initiate payment. Please retry.");
     }
   };
 
   const handleDownloadInvoice = () => {
-    if (!orderCreated?.orderId && !paymentStatus?.orderId) return;
-    const orderId = paymentStatus?.orderId || orderCreated?.orderId;
-    window.open(`/api/payments/${orderId}/invoice`, "_blank");
+    const orderId = paymentStatus?.orderId || order?.orderId;
+    if (!orderId) return;
+    window.open(`/api/payments/${encodeURIComponent(orderId)}/invoice`, "_blank");
   };
+
+  const priceLabel = cohort ? formatMoney(cohort.priceAmount, cohort.currency) : "";
+  const holdExpired =
+    secondsRemaining !== null && secondsRemaining <= 0 && !paymentStatus?.isPaid;
+  const soldOut = !!cohort && cohort.seatsLeft <= 0 && !order;
 
   return (
     <div className="min-h-screen bg-[#F5F2EA] text-[#16150F] font-sans antialiased">
       {/* Top Bar Navigation */}
       <nav className="border-b border-[#D8D3C4] px-6 py-4 flex items-center justify-between bg-[#F5F2EA]">
-        <Link href="/" className="font-heading font-bold text-xl tracking-tight text-[#16150F]">
-          [ByteHUB]
+        <Link href="/" className="inline-flex items-center" aria-label="ByteHUB Home">
+          <ByteHubLogo variant="light" size="sm" />
         </Link>
         <div className="flex items-center gap-6 text-sm">
           <Link href="/training" className="text-[#5A574D] hover:text-[#16150F]">
             ← Return to programmes
           </Link>
-          <span className="text-xs uppercase tracking-wider px-2 py-0.5 border border-[#D8D3C4] text-[#5A574D]">
-            Test Payment Mode
-          </span>
+          {order?.isTestMode && (
+            <span className="text-xs uppercase tracking-wider px-2 py-0.5 border border-[#B8341A] text-[#B8341A]">
+              Test mode — no real payment
+            </span>
+          )}
         </div>
       </nav>
 
       <main className="max-w-4xl mx-auto px-6 py-12">
-        {paymentStatus?.isPaid ? (
+        {loadState === "loading" && (
+          <p className="font-mono text-xs text-[#5A574D]">Loading cohort details...</p>
+        )}
+
+        {loadState === "not_found" && (
+          <div className="bg-[#FAF8F3] border border-[#D8D3C4] p-8 space-y-4">
+            <h1 className="font-heading text-2xl font-bold">
+              This cohort is not open for enrolment.
+            </h1>
+            <p className="text-sm text-[#5A574D]">
+              It may have closed or the link may be out of date.
+            </p>
+            <Link
+              href="/training"
+              className="inline-block px-6 py-3 bg-[#16150F] text-[#F5F2EA] font-medium text-sm"
+            >
+              Browse programmes
+            </Link>
+          </div>
+        )}
+
+        {loadState === "error" && (
+          <div
+            role="alert"
+            className="p-4 bg-red-50 border border-red-200 text-red-700 text-sm"
+          >
+            Cohort details could not be loaded. Please refresh the page in a moment.
+          </div>
+        )}
+
+        {loadState === "ready" && cohort && paymentStatus?.isPaid && (
           /* ================================================================ */
-          /* Payment Confirmed State (Source of truth: Verified Webhook)     */
+          /* Payment Confirmed State (confirmed by the server with the gateway) */
           /* ================================================================ */
           <div className="bg-[#FAF8F3] border border-[#D8D3C4] p-8 md:p-12">
             <div className="inline-block px-3 py-1 bg-[#16150F] text-[#F5F2EA] text-xs font-mono uppercase tracking-wider mb-6">
@@ -246,8 +334,8 @@ export default function TrainingCheckoutPage() {
               Your seat is confirmed.
             </h1>
             <p className="text-[#5A574D] text-base mb-8 max-w-xl">
-              The payment has been captured and verified via cryptographically signed webhook. Your
-              enrolment is active, and a formal tax receipt has been generated.
+              Your payment for {cohort.programme.title} has been verified with the payment
+              gateway and your enrolment is active. A receipt has been emailed to you.
             </p>
 
             {/* Receipt Summary Card */}
@@ -263,21 +351,18 @@ export default function TrainingCheckoutPage() {
               <div className="flex justify-between border-b border-[#D8D3C4] pb-2">
                 <span className="text-[#5A574D]">Amount Paid:</span>
                 <span className="font-bold text-[#16150F]">
-                  {paymentStatus.currency === "INR"
-                    ? `₹${(paymentStatus.amount / 100).toLocaleString("en-IN")}`
-                    : `$${(paymentStatus.amount / 100).toFixed(2)}`}
+                  {formatMoney(paymentStatus.amount, paymentStatus.currency)}
                 </span>
               </div>
               <div className="flex justify-between border-b border-[#D8D3C4] pb-2">
                 <span className="text-[#5A574D]">Gateway:</span>
                 <span className="font-bold text-[#16150F]">{paymentStatus.provider}</span>
               </div>
-              <div className="pt-2 text-[#5A574D]">
-                <p>{paymentStatus.invoice?.legalAndTax.gstNotice}</p>
-                <p className="mt-1 text-[10px] text-[#B8341A]">
-                  * {paymentStatus.invoice?.legalAndTax.accountantReminder}
-                </p>
-              </div>
+              {paymentStatus.invoice && (
+                <div className="pt-2 text-[#5A574D]">
+                  <p>{paymentStatus.invoice.legalAndTax.gstNotice}</p>
+                </div>
+              )}
             </div>
 
             <div className="flex flex-wrap gap-4">
@@ -286,7 +371,7 @@ export default function TrainingCheckoutPage() {
                 onClick={handleDownloadInvoice}
                 className="px-6 py-3 bg-[#16150F] text-[#F5F2EA] font-medium text-sm hover:bg-[#333129] transition-colors"
               >
-                Download Tax Invoice (PDF)
+                Download Receipt (PDF)
               </button>
               <Link
                 href="/dashboard/student"
@@ -296,7 +381,9 @@ export default function TrainingCheckoutPage() {
               </Link>
             </div>
           </div>
-        ) : (
+        )}
+
+        {loadState === "ready" && cohort && !paymentStatus?.isPaid && (
           /* ================================================================ */
           /* Standard Checkout Screen                                         */
           /* ================================================================ */
@@ -308,93 +395,77 @@ export default function TrainingCheckoutPage() {
                   Enrolment Checkout
                 </span>
                 <h1 className="font-heading text-3xl md:text-4xl font-bold tracking-tight mt-1">
-                  Full-Stack Web Development
+                  {cohort.programme.title}
                 </h1>
                 <p className="text-[#5A574D] text-sm mt-2">
-                  Cohort 01 — Full-Stack Web · 12 weeks · [REMOTE / ON-SITE]
+                  {cohort.name} · {cohort.durationWeeks} weeks · {cohort.mode} · Starts{" "}
+                  {formatDate(cohort.startDate)}
                 </p>
               </div>
 
-              {/* 15-Minute Reservation Hold Alert */}
+              {/* Seat status */}
               <div className="border border-[#D8D3C4] bg-[#FAF8F3] p-4 flex items-center justify-between">
-                <div>
-                  <span className="text-xs uppercase tracking-wider text-[#5A574D] block font-mono">
-                    Temporary Seat Hold
+                {secondsRemaining !== null ? (
+                  <>
+                    <div>
+                      <span className="text-xs uppercase tracking-wider text-[#5A574D] block font-mono">
+                        Temporary Seat Hold
+                      </span>
+                      <span className="text-sm font-medium text-[#16150F]">
+                        {holdExpired
+                          ? "Your seat hold has expired."
+                          : "Your seat is reserved for:"}
+                      </span>
+                    </div>
+                    <div className="font-mono text-xl font-bold text-[#B8341A] tracking-wider">
+                      {formatTimer(secondsRemaining)}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <span className="text-xs uppercase tracking-wider text-[#5A574D] block font-mono">
+                        Availability
+                      </span>
+                      <span className="text-sm font-medium text-[#16150F]">
+                        A seat is held for you for 15 minutes once you proceed to pay.
+                      </span>
+                    </div>
+                    <div
+                      className="font-mono text-sm font-bold text-[#B8341A]"
+                      data-testid="seats-remaining"
+                    >
+                      {cohort.seatsLeft > 0
+                        ? `${cohort.seatsLeft} seats left`
+                        : "Sold out"}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Payment method */}
+              <div className="border border-[#D8D3C4] bg-[#FAF8F3] p-6 space-y-3">
+                <h2 className="font-heading text-lg font-bold">Payment Method</h2>
+                <div className="p-4 border border-[#B8341A] bg-[#F5F2EA]">
+                  <span className="font-medium text-sm text-[#16150F] block">
+                    Cashfree Payments (UPI, Cards, Netbanking, Wallets)
                   </span>
-                  <span className="text-sm font-medium text-[#16150F]">
-                    Your seat is reserved for:
+                  <span className="text-xs text-[#5A574D] mt-0.5 block">
+                    Pay in INR (₹) with Google Pay, PhonePe, Paytm, RuPay, cards, or any
+                    major bank. You choose the method in the secure payment window.
                   </span>
-                </div>
-                <div className="font-mono text-xl font-bold text-[#B8341A] tracking-wider">
-                  {formatTimer(secondsRemaining)}
                 </div>
               </div>
 
-              {/* Provider Selection */}
-              <div className="border border-[#D8D3C4] bg-[#FAF8F3] p-6 space-y-4">
-                <h2 className="font-heading text-lg font-bold">Select Payment Provider</h2>
-                <div className="space-y-3">
-                  <label
-                    className={`flex items-start gap-3 p-4 border cursor-pointer transition-colors ${
-                      provider === "RAZORPAY"
-                        ? "border-[#B8341A] bg-[#F5F2EA]"
-                        : "border-[#D8D3C4] hover:border-[#16150F]"
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="provider"
-                      value="RAZORPAY"
-                      checked={provider === "RAZORPAY"}
-                      onChange={() => setProvider("RAZORPAY")}
-                      className="mt-1 accent-[#B8341A]"
-                    />
-                    <div>
-                      <span className="font-medium text-sm block text-[#16150F]">
-                        Razorpay (India Default: UPI, RuPay, Netbanking, Cards)
-                      </span>
-                      <span className="text-xs text-[#5A574D] mt-0.5 block">
-                        Native Indian payment rails in INR (₹). Lowest latency and instant QR capture.
-                      </span>
-                    </div>
-                  </label>
-
-                  <label
-                    className={`flex items-start gap-3 p-4 border cursor-pointer transition-colors ${
-                      provider === "STRIPE"
-                        ? "border-[#B8341A] bg-[#F5F2EA]"
-                        : "border-[#D8D3C4] hover:border-[#16150F]"
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="provider"
-                      value="STRIPE"
-                      checked={provider === "STRIPE"}
-                      onChange={() => setProvider("STRIPE")}
-                      className="mt-1 accent-[#B8341A]"
-                    />
-                    <div>
-                      <span className="font-medium text-sm block text-[#16150F]">
-                        Stripe (International Cards)
-                      </span>
-                      <span className="text-xs text-[#5A574D] mt-0.5 block">
-                        Visa, Mastercard, American Express with 3D Secure 2 authentication.
-                      </span>
-                    </div>
-                  </label>
-                </div>
-              </div>
-
-              {/* PCI-DSS & Architecture Notice */}
               <div className="text-xs text-[#5A574D] space-y-1">
                 <p>
-                  <strong>Security Assurance:</strong> Card and sensitive payment credentials NEVER
-                  touch our servers or logs. All transactions are handled directly through
-                  PCI-DSS Level 1 certified gateways.
+                  <strong>Security Assurance:</strong> Card and sensitive payment
+                  credentials NEVER touch our servers or logs. Payments are handled
+                  directly by a PCI-DSS Level 1 certified gateway.
                 </p>
                 <p>
-                  The server strictly computes pricing from the database. Client prices are never accepted.
+                  The fee is set by ByteHUB&apos;s server and confirmed with the gateway
+                  before your seat is activated.
                 </p>
               </div>
             </div>
@@ -408,46 +479,73 @@ export default function TrainingCheckoutPage() {
 
                 <div className="space-y-3 text-sm">
                   <div className="flex justify-between text-[#5A574D]">
-                    <span>Base Tuition</span>
-                    <span>₹20,338.98</span>
+                    <span>Programme Tuition</span>
+                    <span>{priceLabel}</span>
                   </div>
                   <div className="flex justify-between text-[#5A574D]">
-                    <span>
-                      GST (18% SAC 999293)
-                      <span className="block text-[10px] text-[#5A574D]">[PLACEHOLDER]</span>
-                    </span>
-                    <span>₹3,661.02</span>
+                    <div>
+                      <span>Taxes (GST)</span>
+                      <span className="block text-[10px] text-[#5A574D]">
+                        Not charged (exempt — small enterprise under Sec 22 CGST Act)
+                      </span>
+                    </div>
+                    <span>{formatMoney(0, cohort.currency)}</span>
                   </div>
                   <div className="border-t border-[#D8D3C4] pt-3 flex justify-between font-bold text-base text-[#16150F]">
                     <span>Total Payable</span>
-                    <span className="text-[#B8341A]">₹24,000</span>
+                    <span className="text-[#B8341A]">{priceLabel}</span>
                   </div>
                 </div>
 
                 {errorMessage && (
-                  <div className="mt-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs">
+                  <div
+                    role="alert"
+                    className="mt-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs"
+                  >
                     {errorMessage}
                   </div>
                 )}
 
-                {pollingActive && (
+                {awaitingConfirmation && (
                   <div className="mt-4 p-3 bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center gap-2">
                     <span className="animate-spin inline-block w-3 h-3 border-2 border-amber-800 border-t-transparent rounded-full" />
-                    <span>Awaiting verified webhook confirmation from gateway...</span>
+                    <span>Confirming your payment with the gateway...</span>
                   </div>
                 )}
 
-                <button
-                  type="button"
-                  onClick={handleInitiatePayment}
-                  disabled={isProcessing || secondsRemaining <= 0}
-                  className="w-full mt-6 py-3.5 bg-[#B8341A] text-white font-medium text-sm hover:bg-[#962B15] transition-colors disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-wider"
-                >
-                  {isProcessing ? "Connecting to Gateway..." : "Proceed to Pay ₹24,000"}
-                </button>
+                {holdExpired ? (
+                  <button
+                    type="button"
+                    onClick={() => window.location.reload()}
+                    className="w-full mt-6 py-3.5 bg-[#16150F] text-white font-medium text-sm uppercase tracking-wider"
+                  >
+                    Start again
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleInitiatePayment}
+                    disabled={isProcessing || awaitingConfirmation || soldOut}
+                    className="w-full mt-6 py-3.5 bg-[#B8341A] text-white font-medium text-sm hover:bg-[#962B15] transition-colors disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-wider"
+                  >
+                    {soldOut
+                      ? "Sold out"
+                      : isProcessing
+                        ? "Connecting to Gateway..."
+                        : `Proceed to Pay ${priceLabel}`}
+                  </button>
+                )}
 
                 <p className="mt-3 text-[11px] text-[#5A574D] text-center">
-                  By clicking Proceed, you agree to the ByteHUB enrolment and refund policies.
+                  By clicking Proceed, you agree to the{" "}
+                  <Link href="/terms" target="_blank" className="underline">
+                    Terms of Service
+                  </Link>{" "}
+                  and{" "}
+                  <Link href="/refund-policy" target="_blank" className="underline">
+                    Refund &amp; Cancellation Policy
+                  </Link>
+                  .
                 </p>
               </div>
             </div>
@@ -457,10 +555,13 @@ export default function TrainingCheckoutPage() {
 
       {/* Colophon Footer */}
       <footer className="border-t border-[#D8D3C4] mt-24 py-6 px-6 text-xs text-[#5A574D] flex flex-col sm:flex-row items-center justify-between max-w-4xl mx-auto">
-        <div>[ByteHUB] · Bangalore, India</div>
-        <div className="mt-2 sm:mt-0 font-mono">admissions@bytehub.dev · +91 (80) 4123-4567</div>
+        <div>
+          {siteConfig.brandName} · {siteConfig.contact.city}
+        </div>
+        <div className="mt-2 sm:mt-0 font-mono">
+          {siteConfig.contact.admissionsEmail} · {siteConfig.contact.phone}
+        </div>
       </footer>
     </div>
   );
 }
-

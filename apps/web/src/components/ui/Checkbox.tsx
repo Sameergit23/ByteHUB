@@ -1,6 +1,9 @@
 import React, { forwardRef } from "react";
 
-export interface CheckboxProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "type"> {
+export interface CheckboxProps extends Omit<
+  React.InputHTMLAttributes<HTMLInputElement>,
+  "type"
+> {
   label: React.ReactNode;
   error?: string;
 }
@@ -10,7 +13,7 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
     const inputId = id || `cb-${Math.random().toString(36).substring(2, 9)}`;
 
     return (
-      <div className="space-y-1">
+      <div className={`space-y-1 ${className}`}>
         <label
           htmlFor={inputId}
           className="inline-flex items-start gap-3 cursor-pointer select-none min-h-[44px] py-1.5"
@@ -54,4 +57,3 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
 );
 
 Checkbox.displayName = "Checkbox";
-

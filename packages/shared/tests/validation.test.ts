@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
   SignUpSchema,
-  CreateInternshipSchema,
   CompleteApplicationSchema,
   CreateOrderRequestSchema,
 } from "../src/index.js";
@@ -10,7 +9,7 @@ describe("Shared Zod Schemas Validation", () => {
   it("validates a valid student signup payload", () => {
     const valid = {
       email: "student@bytehub.io",
-      password: "SecurePassword123",
+      password: "SecurePassword123!",
       name: "Aarav Sharma",
       role: "STUDENT",
     };
@@ -34,6 +33,7 @@ describe("Shared Zod Schemas Validation", () => {
       fullName: "Maya Sen",
       email: "maya.sen@domain.edu",
       phone: "+91 9876543210",
+      location: "Bengaluru, Karnataka, India",
       collegeOrUniversity: "Indian Institute of Technology",
       graduationYear: 2026,
       degree: "B.Tech Computer Science",
@@ -41,7 +41,8 @@ describe("Shared Zod Schemas Validation", () => {
       linkedinUrl: "https://linkedin.com/in/mayasen",
       portfolioUrl: "https://mayasen.dev",
       resumeUrl: "https://drive.google.com/file/d/sample-resume",
-      bioSummary: "Passionate full-stack developer experienced in React, TypeScript and Node.js.",
+      bioSummary:
+        "Passionate full-stack developer experienced in React, TypeScript and Node.js.",
       whyInterested:
         "ByteHUB's platform engineering program aligns with my aspiration to ship distributed production systems with strict types.",
       relevantProjectDescription:
@@ -69,4 +70,3 @@ describe("Shared Zod Schemas Validation", () => {
     expect(parsed.provider).toBe("RAZORPAY");
   });
 });
-

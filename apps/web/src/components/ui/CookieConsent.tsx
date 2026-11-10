@@ -4,38 +4,35 @@ import { useEffect, useState } from "react";
 
 export function CookieConsent() {
   const [hasDecided, setHasDecided] = useState<boolean>(true); // default true to avoid flash
-  const [showSettings, setShowSettings] = useState<boolean>(false);
-  const [analyticsEnabled, setAnalyticsEnabled] = useState<boolean>(false);
 
   useEffect(() => {
     const saved = localStorage.getItem("bh_cookie_consent");
     if (!saved) {
       setHasDecided(false);
-    } else {
-      try {
-        const parsed = JSON.parse(saved);
-        setAnalyticsEnabled(parsed.analytics ?? false);
-      } catch {
-        setHasDecided(false);
-      }
     }
   }, []);
 
   const handleAcceptAll = () => {
     localStorage.setItem(
       "bh_cookie_consent",
-      JSON.stringify({ essential: true, analytics: true, decidedAt: new Date().toISOString() })
+      JSON.stringify({
+        essential: true,
+        analytics: true,
+        decidedAt: new Date().toISOString(),
+      })
     );
-    setAnalyticsEnabled(true);
     setHasDecided(true);
   };
 
   const handleAcceptEssentialOnly = () => {
     localStorage.setItem(
       "bh_cookie_consent",
-      JSON.stringify({ essential: true, analytics: false, decidedAt: new Date().toISOString() })
+      JSON.stringify({
+        essential: true,
+        analytics: false,
+        decidedAt: new Date().toISOString(),
+      })
     );
-    setAnalyticsEnabled(false);
     setHasDecided(true);
   };
 
@@ -55,9 +52,14 @@ export function CookieConsent() {
             Privacy & Cookie Policy
           </p>
           <p className="text-xs text-[#5A574D] leading-relaxed">
-            ByteHUB uses essential cookies for secure session management, CSRF defense, and payment
-            routing. Optional privacy-preserving analytics help us measure programme demand. Card
-            numbers and biometric credentials never touch ByteHUB servers.
+            ByteHUB uses essential cookies for secure session management, CSRF defense,
+            and payment routing. Optional privacy-preserving analytics help us measure
+            programme demand. Card numbers and biometric credentials never touch ByteHUB
+            servers.{" "}
+            <a href="/privacy" className="underline text-[#16150F]">
+              Read our Privacy Policy
+            </a>
+            .
           </p>
         </div>
 
@@ -81,4 +83,3 @@ export function CookieConsent() {
     </div>
   );
 }
-

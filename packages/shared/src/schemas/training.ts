@@ -35,8 +35,7 @@ export type TrainingProgram = z.infer<typeof TrainingProgramSchema>;
 
 export const EnrollTrainingSchema = z.object({
   programId: z.string().min(1),
-  gateway: z.enum(["RAZORPAY", "STRIPE"]),
-  currency: z.enum(["INR", "USD"]),
+  gateway: z.enum(["CASHFREE", "RAZORPAY", "STRIPE"]).default("CASHFREE"),
+  currency: z.enum(["INR", "USD"]).default("INR"),
 });
 export type EnrollTrainingInput = z.infer<typeof EnrollTrainingSchema>;
-

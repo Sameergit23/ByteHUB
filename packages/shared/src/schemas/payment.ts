@@ -1,23 +1,24 @@
 import { z } from "zod";
 
-export const PaymentProviderSchema = z.enum(["RAZORPAY", "STRIPE"]);
+export const PaymentProviderSchema = z.enum(["CASHFREE", "RAZORPAY", "STRIPE"]);
 export type PaymentProvider = z.infer<typeof PaymentProviderSchema>;
 
-export const PaymentStatusSchema = z.enum([
-  "PENDING",
-  "SUCCESS",
-  "FAILED",
-  "REFUNDED",
-]);
+export const PaymentStatusSchema = z.enum(["PENDING", "SUCCESS", "FAILED", "REFUNDED"]);
 export type PaymentStatus = z.infer<typeof PaymentStatusSchema>;
 
 export const CreateOrderRequestSchema = z.object({
   programId: z.string().min(1, "Program ID is required"),
-  provider: PaymentProviderSchema,
-  currency: z.enum(["INR", "USD"]),
+  provider: PaymentProviderSchema.default("CASHFREE"),
+  currency: z.enum(["INR", "USD"]).default("INR"),
   idempotencyKey: z.string().min(8, "Idempotency key required"),
 });
 export type CreateOrderRequest = z.infer<typeof CreateOrderRequestSchema>;
+
+export const VerifyCashfreePaymentSchema = z.object({
+  orderId: z.string().min(1),
+  programId: z.string().optional(),
+});
+export type VerifyCashfreePaymentInput = z.infer<typeof VerifyCashfreePaymentSchema>;
 
 export const VerifyRazorpayPaymentSchema = z.object({
   orderId: z.string().min(1),
@@ -46,4 +47,3 @@ export const PaymentRecordSchema = z.object({
   createdAt: z.string(),
 });
 export type PaymentRecord = z.infer<typeof PaymentRecordSchema>;
-

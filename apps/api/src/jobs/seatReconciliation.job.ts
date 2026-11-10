@@ -7,7 +7,7 @@ import { logger } from "../utils/logger.js";
 export async function runSeatReconciliation(): Promise<{ reconciledCount: number }> {
   logger.info("Executing Seat Reconciliation Job...");
 
-  const programs = await prisma.trainingProgram.findMany({
+  const cohorts = await prisma.cohort.findMany({
     include: {
       _count: {
         select: { enrollments: { where: { status: "ACTIVE" } } },
@@ -17,16 +17,16 @@ export async function runSeatReconciliation(): Promise<{ reconciledCount: number
 
   let reconciledCount = 0;
 
-  for (const prog of programs) {
-    const expectedSeatsLeft = Math.max(0, prog.seatsTotal - prog._count.enrollments);
-    if (prog.seatsLeft !== expectedSeatsLeft) {
-      await prisma.trainingProgram.update({
-        where: { id: prog.id },
+  for (const c of cohorts) {
+    const expectedSeatsLeft = Math.max(0, c.seatsTotal - c._count.enrollments);
+    if (c.seatsLeft !== expectedSeatsLeft) {
+      await prisma.cohort.update({
+        where: { id: c.id },
         data: { seatsLeft: expectedSeatsLeft },
       });
       reconciledCount++;
       logger.warn(
-        { programId: prog.id, previous: prog.seatsLeft, corrected: expectedSeatsLeft },
+        { cohortId: c.id, previous: c.seatsLeft, corrected: expectedSeatsLeft },
         "Reconciled cohort seat discrepancy"
       );
     }
@@ -35,4 +35,3 @@ export async function runSeatReconciliation(): Promise<{ reconciledCount: number
   logger.info({ reconciledCount }, "Seat Reconciliation Job Completed");
   return { reconciledCount };
 }
-

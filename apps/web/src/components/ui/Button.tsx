@@ -4,6 +4,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   variant?: "primary" | "outline" | "text";
   size?: "sm" | "md" | "lg";
   fullWidth?: boolean;
+  isLoading?: boolean;
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
@@ -12,6 +13,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       variant = "primary",
       size = "md",
       fullWidth = false,
+      isLoading = false,
       className = "",
       disabled,
       children,
@@ -40,12 +42,18 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     return (
       <button
         ref={ref}
-        disabled={disabled}
+        disabled={disabled || isLoading}
         className={`inline-flex items-center justify-center font-sans font-semibold tracking-tight transition-colors select-none focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2 disabled:opacity-40 disabled:pointer-events-none ${sizeStyles} ${variantStyles} ${
           fullWidth ? "w-full" : ""
         } ${className}`}
         {...props}
       >
+        {isLoading && (
+          <span
+            className="inline-block w-4 h-4 mr-2 border-2 border-current border-t-transparent rounded-full animate-spin"
+            aria-hidden="true"
+          />
+        )}
         {children}
       </button>
     );
@@ -53,4 +61,3 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 );
 
 Button.displayName = "Button";
-

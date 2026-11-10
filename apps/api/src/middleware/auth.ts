@@ -13,10 +13,13 @@ export interface AuthenticatedUser {
 }
 
 declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace -- Express type augmentation
   namespace Express {
     interface Request {
       user?: AuthenticatedUser;
       cookies?: Record<string, string>;
+      /** Unparsed request body, kept for verifying payment webhook signatures. */
+      rawBody?: Buffer;
     }
   }
 }
@@ -24,7 +27,11 @@ declare global {
 /**
  * Native, zero-dependency cookie parser middleware
  */
-export const cookieParserMiddleware = (req: Request, _res: Response, next: NextFunction): void => {
+export const cookieParserMiddleware = (
+  req: Request,
+  _res: Response,
+  next: NextFunction
+): void => {
   const cookieHeader = req.headers.cookie;
   if (!cookieHeader) {
     req.cookies = {};
@@ -70,19 +77,28 @@ export const authenticateJWT = (
   }
 
   try {
-    const decoded = jwt.verify(token, env.JWT_SECRET) as any;
-    const uid = decoded.userId || decoded.id;
+    const decoded = jwt.verify(token, env.JWT_SECRET) as jwt.JwtPayload & {
+      userId?: string;
+      id?: string;
+      email?: string;
+      role?: UserRole;
+      name?: string;
+    };
+    const uid = decoded.userId || decoded.id || "";
     req.user = {
-      ...decoded,
-      userId: uid,
       id: uid,
+      userId: uid,
+      email: decoded.email || "",
+      role: decoded.role as UserRole,
+      name: decoded.name || "",
     };
     next();
   } catch {
     res.status(401).json({
       error: {
         code: "TOKEN_EXPIRED_OR_INVALID",
-        message: "Your session has expired or the token signature is invalid. Please re-authenticate.",
+        message:
+          "Your session has expired or the token signature is invalid. Please re-authenticate.",
       },
     });
   }
@@ -153,25 +169,28 @@ export const checkResourceOwnership = (
 
       if (ownerId !== req.user.userId) {
         // Record security audit log for blocked IDOR attempt
-        await prisma.auditLog.create({
-          data: {
-            userId: req.user.userId,
-            action: "SECURITY_IDOR_BLOCKED",
-            entityType: "RESOURCE",
-            entityId: req.params.id || "unknown",
-            details: {
-              attemptedBy: req.user.userId,
-              actualOwner: ownerId,
-              path: req.originalUrl,
-              method: req.method,
+        await prisma.auditLog
+          .create({
+            data: {
+              userId: req.user.userId,
+              action: "SECURITY_IDOR_BLOCKED",
+              entityType: "RESOURCE",
+              entityId: req.params.id || "unknown",
+              details: {
+                attemptedBy: req.user.userId,
+                actualOwner: ownerId,
+                path: req.originalUrl,
+                method: req.method,
+              },
             },
-          },
-        }).catch(() => null);
+          })
+          .catch(() => null);
 
         res.status(403).json({
           error: {
             code: "FORBIDDEN_RESOURCE",
-            message: "Access denied. You do not have permission to view or modify this record.",
+            message:
+              "Access denied. You do not have permission to view or modify this record.",
           },
         });
         return;

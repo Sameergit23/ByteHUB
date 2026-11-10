@@ -6,6 +6,13 @@ export type ErrorCode =
   | "CONFLICT"
   | "VALIDATION_ERROR"
   | "PAYMENT_FAILED"
+  | "INVALID_SIGNATURE"
+  | "AMOUNT_TAMPERED"
+  | "SEATS_EXHAUSTED"
+  | "TOO_MANY_REQUESTS"
+  | "UNPROCESSABLE_ENTITY"
+  | "CASHFREE_API_ERROR"
+  | "GATEWAY_UNAVAILABLE"
   | "INTERNAL_SERVER_ERROR";
 
 export class AppError extends Error {
@@ -13,7 +20,11 @@ export class AppError extends Error {
   public readonly code: ErrorCode;
   public readonly isOperational: boolean;
 
-  constructor(message: string, statusCode = 500, code: ErrorCode = "INTERNAL_SERVER_ERROR") {
+  constructor(
+    message: string,
+    statusCode = 500,
+    code: ErrorCode = "INTERNAL_SERVER_ERROR"
+  ) {
     super(message);
     this.name = "AppError";
     this.statusCode = statusCode;
@@ -27,7 +38,10 @@ export class AppError extends Error {
     return new AppError(message, 400, code);
   }
 
-  static unauthorized(message = "Authentication required", code: ErrorCode = "UNAUTHORIZED"): AppError {
+  static unauthorized(
+    message = "Authentication required",
+    code: ErrorCode = "UNAUTHORIZED"
+  ): AppError {
     return new AppError(message, 401, code);
   }
 
@@ -35,7 +49,10 @@ export class AppError extends Error {
     return new AppError(message, 403, code);
   }
 
-  static notFound(message = "Resource not found", code: ErrorCode = "NOT_FOUND"): AppError {
+  static notFound(
+    message = "Resource not found",
+    code: ErrorCode = "NOT_FOUND"
+  ): AppError {
     return new AppError(message, 404, code);
   }
 
@@ -43,8 +60,10 @@ export class AppError extends Error {
     return new AppError(message, 409, code);
   }
 
-  static internal(message = "Internal server error"): AppError {
-    return new AppError(message, 500, "INTERNAL_SERVER_ERROR");
+  static internal(
+    message = "Internal server error",
+    code: ErrorCode = "INTERNAL_SERVER_ERROR"
+  ): AppError {
+    return new AppError(message, 500, code);
   }
 }
-

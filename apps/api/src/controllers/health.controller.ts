@@ -26,6 +26,7 @@ export class HealthController {
       status: isHealthy ? "UP" : "DEGRADED",
       service: "bytehub-api",
       timestamp: new Date().toISOString(),
+      uptime: Math.floor(process.uptime()),
       uptimeSeconds: Math.floor(process.uptime()),
       responseTimeMs: Date.now() - startTime,
       environment: env.NODE_ENV,

@@ -8,7 +8,7 @@ import {
   InternshipFilterSchema,
 } from "@bytehub/shared";
 
-export const internshipsRouter = Router();
+export const internshipsRouter: Router = Router();
 
 // Public: list with filters & cursor pagination
 internshipsRouter.get(
@@ -17,11 +17,16 @@ internshipsRouter.get(
   InternshipController.list
 );
 
-// Public: detail by slug or id
+// Company & Admin: own postings with applicant counts (must sit before "/:slug")
 internshipsRouter.get(
-  "/:slug",
-  InternshipController.getBySlug
+  "/mine",
+  authenticateJWT,
+  requireRoles("COMPANY", "ADMIN"),
+  InternshipController.listMine
 );
+
+// Public: detail by slug or id
+internshipsRouter.get("/:slug", InternshipController.getBySlug);
 
 // Company & Admin: create internship
 internshipsRouter.post(

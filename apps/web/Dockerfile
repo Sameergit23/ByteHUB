@@ -38,6 +38,15 @@ COPY apps/web ./apps/web
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
+# The browser only ever calls same-origin "/api/*"; Next.js proxies those requests to the API.
+# The proxy target is fixed when the image is built, so pass the address the web container
+# uses to reach the API (e.g. --build-arg API_INTERNAL_URL=http://api:5000/api).
+ARG API_INTERNAL_URL=http://api:5000/api
+ENV API_INTERNAL_URL=${API_INTERNAL_URL}
+
+# The runner stage copies .next/standalone, which next.config.mjs only emits with this flag.
+ENV BUILD_STANDALONE=1
+
 # Build shared package first
 RUN pnpm --filter @bytehub/shared build
 

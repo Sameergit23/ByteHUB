@@ -1,5 +1,4 @@
 import { prisma } from "../lib/prisma.js";
-import { Prisma } from "@prisma/client";
 
 export class TrainingRepository {
   /**
@@ -78,6 +77,24 @@ export class TrainingRepository {
   }
 
   /**
+   * All enrolments of one student with cohort, programme and certificate (dashboard view).
+   */
+  async findEnrollmentsForUser(userId: string) {
+    return prisma.enrollment.findMany({
+      where: {
+        userId,
+        deletedAt: null,
+        status: { in: ["PENDING", "ACTIVE", "COMPLETED"] },
+      },
+      include: {
+        cohort: { include: { programme: true } },
+        certificate: true,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  /**
    * Find enrollment by ID with full cohort and programme details.
    */
   async findEnrollmentById(enrollmentId: string) {
@@ -122,22 +139,25 @@ export class TrainingRepository {
         throw new Error("COHORT_NOT_FOUND");
       }
 
-      // 2. Check for active or unexpired pending enrollment
+      // 2. One enrolment row exists per (student, cohort); look at whatever is there.
       const existing = await tx.enrollment.findFirst({
-        where: {
-          userId,
-          cohortId,
-          OR: [
-            { status: "ACTIVE" },
-            {
-              status: "PENDING",
-              reservedUntil: { gt: new Date() },
-            },
-          ],
-        },
+        where: { userId, cohortId },
       });
 
-      if (existing) {
+      const now = new Date();
+      const isFree = cohort.priceAmount === 0;
+      const reservedUntil = isFree
+        ? null
+        : new Date(Date.now() + reservationMinutes * 60 * 1000);
+      const holdIsLive =
+        existing?.status === "PENDING" &&
+        !!existing.reservedUntil &&
+        existing.reservedUntil > now;
+
+      if (
+        existing &&
+        (existing.status === "ACTIVE" || existing.status === "COMPLETED" || holdIsLive)
+      ) {
         return {
           alreadyEnrolled: true,
           enrollment: existing,
@@ -145,39 +165,41 @@ export class TrainingRepository {
         };
       }
 
-      // 3. Atomically decrement seats if seatsLeft > 0
-      // In PostgreSQL: UPDATE "Cohort" SET "seatsLeft" = "seatsLeft" - 1 WHERE id = $1 AND "seatsLeft" > 0 RETURNING *
-      const updatedCount = await tx.$executeRaw`
-        UPDATE "Cohort"
-        SET "seatsLeft" = "seatsLeft" - 1, "updatedAt" = NOW()
-        WHERE "id" = ${cohortId} AND "seatsLeft" > 0 AND "published" = true;
-      `;
+      // A lapsed PENDING hold that the expiry job has not swept yet still owns its seat,
+      // so it can simply be extended. Anything else needs a fresh seat from the pool.
+      const stillHoldsSeat = existing?.status === "PENDING";
 
-      if (updatedCount === 0) {
-        throw new Error("SEATS_EXHAUSTED");
+      if (!stillHoldsSeat) {
+        // 3. Atomically decrement seats if seatsLeft > 0 (conditional update prevents overbooking)
+        const updatedCount = await tx.$executeRaw`
+          UPDATE "Cohort"
+          SET "seatsLeft" = "seatsLeft" - 1, "updatedAt" = NOW()
+          WHERE "id" = ${cohortId} AND "seatsLeft" > 0 AND "published" = true;
+        `;
+
+        if (updatedCount === 0) {
+          throw new Error("SEATS_EXHAUSTED");
+        }
       }
 
-      const isFree = cohort.priceAmount === 0;
-      const reservedUntil = isFree
-        ? null
-        : new Date(Date.now() + reservationMinutes * 60 * 1000);
+      // 4. Create the enrolment, or revive the student's earlier (expired/cancelled) one
+      const data = {
+        priceAmount: cohort.priceAmount,
+        currency: cohort.currency,
+        status: (isFree ? "ACTIVE" : "PENDING") as "ACTIVE" | "PENDING",
+        reservedUntil,
+      };
 
-      // 4. Create enrollment record
-      const enrollment = await tx.enrollment.create({
-        data: {
-          userId,
-          cohortId,
-          priceAmount: cohort.priceAmount,
-          currency: cohort.currency,
-          status: isFree ? "ACTIVE" : "PENDING",
-          reservedUntil,
-        },
-        include: {
-          cohort: {
-            include: { programme: true },
-          },
-        },
-      });
+      const enrollment = existing
+        ? await tx.enrollment.update({
+            where: { id: existing.id },
+            data: { ...data, paymentId: null, deletedAt: null },
+            include: { cohort: { include: { programme: true } } },
+          })
+        : await tx.enrollment.create({
+            data: { userId, cohortId, ...data },
+            include: { cohort: { include: { programme: true } } },
+          });
 
       return {
         alreadyEnrolled: false,

@@ -115,6 +115,9 @@ services:
       S3_BUCKET_NAME: "bytehub-resumes"
       S3_ACCESS_KEY: ${MINIO_ROOT_USER:-bytehub_minio_admin}
       S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-bytehub_minio_secret_key}
+    volumes:
+      # Uploaded resumes survive container rebuilds and restarts.
+      - resume_data:/app/data/resumes
     depends_on:
       postgres:
         condition: service_healthy
@@ -137,6 +140,8 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      args:
+        API_INTERNAL_URL: "http://api:5000/api"
     container_name: bytehub-web
     restart: unless-stopped
     ports:
@@ -144,7 +149,8 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
-      NEXT_PUBLIC_API_URL: "http://localhost:5000/api"
+      # Server-side rendering calls the API directly over the private network.
+      API_INTERNAL_URL: "http://api:5000/api"
     depends_on:
       api:
         condition: service_healthy
@@ -161,6 +167,8 @@ services:
 # ------------------------------------------------------------------------------
 volumes:
   postgres_data:
+    driver: local
+  resume_data:
     driver: local
   redis_data:
     driver: local

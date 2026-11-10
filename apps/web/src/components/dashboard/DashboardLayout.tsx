@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { getStoredUser, clearAuth } from "../../lib/api";
+import { useRouter } from "next/navigation";
+import { getStoredUser, logout, refreshSession, StoredUser } from "../../lib/api";
+import { ByteHubLogo } from "../brand/ByteHubLogo";
 
 export interface NavItem {
   id: string;
@@ -35,10 +36,36 @@ export function DashboardLayout({
 }: DashboardLayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const router = useRouter();
-  const user = getStoredUser();
+  const [user, setUser] = useState<StoredUser | null>(null);
 
-  const handleLogout = () => {
-    clearAuth();
+  useEffect(() => {
+    setUser(getStoredUser());
+  }, []);
+
+  // Keep the 15-minute session alive while a dashboard is open, and renew it as soon as the
+  // tab comes back into view, so navigating between protected pages never hits a stale cookie.
+  useEffect(() => {
+    const renew = () => {
+      const last = Number(localStorage.getItem("bytehub_refreshed_at") || 0);
+      if (Date.now() - last > 10 * 60 * 1000) {
+        void refreshSession();
+      }
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") renew();
+    };
+
+    renew();
+    const timer = window.setInterval(renew, 60 * 1000);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
+
+  const handleLogout = async () => {
+    await logout();
     router.push("/auth?mode=login");
   };
 
@@ -46,8 +73,8 @@ export function DashboardLayout({
     role === "STUDENT"
       ? "Student Portal"
       : role === "COMPANY"
-      ? "Employer Portal"
-      : "Administration";
+        ? "Employer Portal"
+        : "Administration";
 
   return (
     <div className="min-h-screen bg-[#F5F2EA] text-[#16150F] flex flex-col md:flex-row antialiased font-sans">
@@ -55,8 +82,8 @@ export function DashboardLayout({
       {/* Mobile Top Header (< 768px)                                         */}
       {/* =================================================================== */}
       <div className="md:hidden border-b border-[#D8D3C4] px-4 py-3 flex items-center justify-between bg-[#F5F2EA] sticky top-0 z-40">
-        <Link href="/" className="font-heading font-bold text-lg tracking-tight">
-          [ByteHUB]
+        <Link href="/" className="inline-flex items-center" aria-label="ByteHUB Home">
+          <ByteHubLogo variant="light" size="sm" />
         </Link>
         <div className="flex items-center gap-3">
           <span className="text-[10px] font-mono px-2 py-0.5 border border-[#D8D3C4] uppercase">
@@ -80,7 +107,13 @@ export function DashboardLayout({
         <div className="md:hidden fixed inset-0 z-50 bg-[#F5F2EA] p-6 flex flex-col justify-between overflow-y-auto">
           <div>
             <div className="flex justify-between items-center pb-4 border-b border-[#D8D3C4] mb-6">
-              <span className="font-heading font-bold text-lg">[ByteHUB]</span>
+              <Link
+                href="/"
+                onClick={() => setMobileMenuOpen(false)}
+                aria-label="ByteHUB Home"
+              >
+                <ByteHubLogo variant="light" size="sm" />
+              </Link>
               <button
                 type="button"
                 onClick={() => setMobileMenuOpen(false)}
@@ -91,7 +124,9 @@ export function DashboardLayout({
             </div>
 
             <div className="mb-6 pb-4 border-b border-[#D8D3C4]">
-              <div className="text-xs font-mono uppercase text-[#5A574D]">{roleLabel}</div>
+              <div className="text-xs font-mono uppercase text-[#5A574D]">
+                {roleLabel}
+              </div>
               <div className="font-bold text-base mt-1">{user?.name || "User"}</div>
               <div className="text-xs text-[#5A574D]">{user?.email}</div>
             </div>
@@ -150,10 +185,10 @@ export function DashboardLayout({
         <div className="space-y-6">
           {/* Logo & Role Pill */}
           <div>
-            <Link href="/" className="font-heading font-bold text-xl tracking-tight block">
-              [ByteHUB]
+            <Link href="/" className="inline-flex items-center" aria-label="ByteHUB Home">
+              <ByteHubLogo variant="light" size="sm" />
             </Link>
-            <div className="mt-2 inline-flex items-center gap-1.5 px-2 py-0.5 border border-[#D8D3C4] text-[10px] font-mono uppercase tracking-wider text-[#5A574D]">
+            <div className="mt-3 inline-flex items-center gap-1.5 px-2 py-0.5 border border-[#D8D3C4] text-[10px] font-mono uppercase tracking-wider text-[#5A574D]">
               <span className="w-1.5 h-1.5 bg-[#B8341A]" />
               {roleLabel}
             </div>
@@ -161,8 +196,12 @@ export function DashboardLayout({
 
           {/* User Profile Summary */}
           <div className="border border-[#D8D3C4] bg-[#FAF8F3] p-3 text-xs space-y-1">
-            <div className="font-bold text-[#16150F] truncate">{user?.name || "Active Session"}</div>
-            <div className="text-[#5A574D] font-mono text-[11px] truncate">{user?.email || ""}</div>
+            <div className="font-bold text-[#16150F] truncate">
+              {user?.name || "Active Session"}
+            </div>
+            <div className="text-[#5A574D] font-mono text-[11px] truncate">
+              {user?.email || ""}
+            </div>
           </div>
 
           {/* Navigation Links */}
@@ -234,4 +273,3 @@ export function DashboardLayout({
     </div>
   );
 }
-

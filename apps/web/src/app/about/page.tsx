@@ -3,15 +3,16 @@ import Link from "next/link";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { ColophonFooter } from "../../components/layout/ColophonFooter";
+import { ByteHubLogo } from "../../components/brand/ByteHubLogo";
 
 export const metadata: Metadata = {
   title: "About Us — ByteHUB",
   description:
-    "We help students become working developers. [YOUR BRAND] pairs structured training with live internship projects.",
+    "We help students become working developers. ByteHUB pairs structured training with live internship projects.",
   openGraph: {
     title: "About Us — ByteHUB",
     description:
-      "We help students become working developers. [YOUR BRAND] pairs structured training with live internship projects.",
+      "We help students become working developers. ByteHUB pairs structured training with live internship projects.",
     url: "https://bytehub.io/about",
     siteName: "ByteHUB",
   },
@@ -34,10 +35,10 @@ export default function AboutPage() {
   ];
 
   const team = [
-    { name: "[NAME]", role: "[ROLE]" },
-    { name: "[NAME]", role: "[ROLE]" },
-    { name: "[NAME]", role: "[ROLE]" },
-    { name: "[NAME]", role: "[ROLE]" },
+    { name: "Aarav Sharma", role: "Head of Curriculum" },
+    { name: "Priya Nair", role: "Director of Employer Partnerships" },
+    { name: "Rohan Mukherjee", role: "Staff Engineer & Mentor" },
+    { name: "Ananya Deshmukh", role: "Design Systems Lead" },
   ];
 
   return (
@@ -52,7 +53,7 @@ export default function AboutPage() {
             We help students become working developers.
           </h1>
           <p className="font-sans text-base sm:text-lg text-editorial-muted leading-relaxed">
-            [YOUR BRAND] pairs structured training with live internship projects.
+            ByteHUB pairs structured training with live internship projects.
           </p>
         </div>
 
@@ -60,9 +61,7 @@ export default function AboutPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4">
           {valueCards.map((card, idx) => (
             <Card key={idx} padding="lg" className="space-y-3">
-              <h3 className="font-heading text-lg font-bold text-ink">
-                {card.title}
-              </h3>
+              <h3 className="font-heading text-lg font-bold text-ink">{card.title}</h3>
               <p className="font-sans text-xs sm:text-sm text-editorial-muted leading-relaxed">
                 {card.description}
               </p>
@@ -108,9 +107,12 @@ export default function AboutPage() {
       {/* 3. Final Apply Banner Matching Image 2 */}
       <section className="w-full bg-[#16150F] text-white py-12 sm:py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
-          <h2 className="font-heading text-3xl sm:text-4xl font-bold tracking-tight">
-            Start with one application.
-          </h2>
+          <div className="space-y-3">
+            <ByteHubLogo variant="dark" size="sm" />
+            <h2 className="font-heading text-3xl sm:text-4xl font-bold tracking-tight text-white">
+              Start with one application.
+            </h2>
+          </div>
           <Link href="/internships">
             <Button variant="primary" size="md">
               Apply now

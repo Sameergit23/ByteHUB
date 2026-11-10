@@ -43,7 +43,7 @@ export class ApplicationRepository {
             companyName: true,
             location: true,
             type: true,
-            stipend: true,
+            stipendAmount: true,
             currency: true,
           },
         },
@@ -70,7 +70,7 @@ export class ApplicationRepository {
     return prisma.application.update({
       where: { id },
       data: {
-        status: status as any,
+        status,
         ...(feedbackNote !== undefined ? { feedbackNote } : {}),
       },
     });
@@ -78,4 +78,3 @@ export class ApplicationRepository {
 }
 
 export const applicationRepository = new ApplicationRepository();
-

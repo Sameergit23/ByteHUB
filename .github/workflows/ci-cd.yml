@@ -59,16 +59,17 @@ jobs:
       - name: Checkout Codebase
         uses: actions/checkout@v4
 
+      # pnpm must be installed before setup-node, which uses it for the dependency cache.
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9.12.3
+
       - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'pnpm'
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v3
-        with:
-          version: 9.12.3
 
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
@@ -127,7 +128,8 @@ jobs:
   deploy-staging:
     name: Deploy to Staging Environment
     needs: [build-containers]
-    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && github.event_name == 'push'
+    # Runs only once a hosting target exists: set the repository variable DEPLOY_ENABLED=true.
+    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && github.event_name == 'push' && vars.DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
     environment:
       name: staging
@@ -147,20 +149,18 @@ jobs:
       - name: Run Zero-Downtime Database Migration
         run: |
           pnpm install --frozen-lockfile
-          pnpm --filter @bytehub/api prisma migrate deploy
+          pnpm --filter @bytehub/api run prisma:deploy
         env:
           DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
 
       - name: Deploy Staging Application Containers
         run: |
-          echo "Deploying container tag ci-${{ github.sha }} to Staging cluster..."
-          # Deploy command (e.g. AWS ECS / Kubernetes / Railway CLI / Render API):
-          # aws ecs update-service --cluster bytehub-staging --service api --force-new-deployment
+          # TODO: replace with your host's deploy command (Render / Railway / Fly / ECS / Kubernetes).
+          echo "::error::No staging deploy command is configured in .github/workflows/ci-cd.yml"
+          exit 1
 
       - name: Staging Automated Smoke & Health Check
-        run: |
-          echo "Verifying health endpoint at https://staging-api.bytehub.internal/api/health"
-          # curl --fail --retry 5 --retry-delay 5 https://staging-api.bytehub.internal/api/health || exit 1
+        run: curl --fail --silent --show-error --retry 5 --retry-delay 5 "${{ vars.STAGING_API_URL }}/api/health"
 
   # ----------------------------------------------------------------------------
   # 5. Deploy to Production (Triggered on Tagged Release with Manual Approval)
@@ -168,7 +168,7 @@ jobs:
   deploy-production:
     name: Deploy to Production (Manual Approval Gate)
     needs: [build-containers]
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') && vars.DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
     environment:
       name: production
@@ -188,22 +188,15 @@ jobs:
       - name: Run Zero-Downtime Database Migration (Backward-Compatible)
         run: |
           pnpm install --frozen-lockfile
-          pnpm --filter @bytehub/api prisma migrate deploy
+          pnpm --filter @bytehub/api run prisma:deploy
         env:
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
 
       - name: Deploy Production Containers (Blue-Green / Rolling Rollout)
         run: |
-          echo "Rolling out release ${{ github.ref_name }} to Production cluster..."
-          # Blue-green container traffic switch with 0-downtime cutover
+          # TODO: replace with your host's deploy command (Render / Railway / Fly / ECS / Kubernetes).
+          echo "::error::No production deploy command is configured in .github/workflows/ci-cd.yml"
+          exit 1
 
       - name: Verify Production Health Check & Uptime
-        run: |
-          echo "Asserting production /api/health returns 200 UP..."
-          # curl --fail --retry 10 --retry-delay 5 https://api.bytehub.dev/api/health || exit 1
-
-      - name: Notify Sentry of Production Release
-        run: |
-          echo "Registering Sentry release ${{ github.ref_name }}..."
-          # sentry-cli releases new "${{ github.ref_name }}"
-          # sentry-cli releases finalize "${{ github.ref_name }}"
+        run: curl --fail --silent --show-error --retry 10 --retry-delay 5 "${{ vars.PRODUCTION_API_URL }}/api/health"

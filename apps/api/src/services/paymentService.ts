@@ -1,7 +1,12 @@
 import crypto from "node:crypto";
 import { paymentRepository } from "../repositories/payment.repository.js";
 import { trainingRepository } from "../repositories/training.repository.js";
-import { env } from "../config/env.js";
+import {
+  env,
+  isCashfreeMockMode,
+  isRazorpayConfigured,
+  isStripeConfigured,
+} from "../config/env.js";
 import { AppError } from "../utils/apiError.js";
 import {
   PaymentStatus,
@@ -19,10 +24,38 @@ import {
   buildSimpleInvoicePdfBuffer,
 } from "../utils/invoiceGenerator.js";
 import { prisma } from "../lib/prisma.js";
+import { CashfreeService, CashfreeOrderStatus } from "./cashfree.service.js";
+
+/** Cashfree webhook body (fields we read; shapes differ slightly between webhook versions). */
+interface CashfreeWebhookPayload {
+  type?: string;
+  event?: string;
+  order_id?: string;
+  orderId?: string;
+  data?: { order?: CashfreeWebhookOrder; payment?: CashfreeWebhookPayment };
+  order?: CashfreeWebhookOrder;
+  payment?: CashfreeWebhookPayment;
+}
+interface CashfreeWebhookOrder {
+  order_id?: string;
+  order_amount?: number | string;
+  order_currency?: string;
+}
+interface CashfreeWebhookPayment {
+  cf_payment_id?: string | number;
+  payment_id?: string | number;
+  payment_status?: string;
+  payment_amount?: number | string;
+  payment_currency?: string;
+  payment_message?: string;
+}
+import { notificationService } from "./notification.service.js";
+import { AlertService } from "./alert.service.js";
+import { logger } from "../utils/logger.js";
 
 export interface CreatePaymentIntentInput {
   cohortId: string;
-  provider?: "RAZORPAY" | "STRIPE";
+  provider?: "CASHFREE" | "RAZORPAY" | "STRIPE";
   idempotencyKey: string;
 }
 
@@ -46,14 +79,20 @@ export class PaymentService {
     // 1. Check idempotency: Return existing payment if already created
     const existingPayment = await paymentRepository.findByIdempotencyKey(idempotencyKey);
     if (existingPayment) {
+      if (existingPayment.userId !== userId) {
+        throw AppError.conflict("This idempotency key has already been used.");
+      }
       return {
         orderId: existingPayment.orderId,
         amount: existingPayment.amount,
         currency: existingPayment.currency,
         provider: existingPayment.provider,
         status: existingPayment.status,
-        keyId: env.RAZORPAY_KEY_ID,
-        publishableKey: env.STRIPE_PUBLISHABLE_KEY,
+        paymentSessionId: (
+          existingPayment.metadata as { paymentSessionId?: string } | null
+        )?.paymentSessionId,
+        cashfreeEnv: this.cashfreeEnvironment(),
+        isTestMode: isCashfreeMockMode(),
         programmeTitle: existingPayment.cohort?.programme?.title,
       };
     }
@@ -73,34 +112,70 @@ export class PaymentService {
       );
     }
 
-    // 3. Ensure user has a valid pending seat reservation
-    let enrollment = await trainingRepository.findUserEnrollment(userId, cohortId);
-    if (!enrollment) {
-      // Auto-reserve seat for 15 minutes if not already reserved
-      const reservation = await trainingRepository.reserveSeatAtomic({
+    // 3. Only Cashfree (INR) is integrated end to end. Razorpay and Stripe are rejected
+    //    up front so no order can be created that the gateway can never settle.
+    const provider = input.provider || "CASHFREE";
+    if (provider !== "CASHFREE") {
+      throw AppError.badRequest(
+        `${provider} checkout is not available yet. Please pay with Cashfree (UPI, cards, netbanking).`
+      );
+    }
+    if (currency !== "INR") {
+      throw AppError.badRequest(
+        "This cohort is priced in a currency that online checkout does not support yet."
+      );
+    }
+
+    // 4. Reserve (or re-use) the student's seat for 15 minutes
+    let reservation;
+    try {
+      reservation = await trainingRepository.reserveSeatAtomic({
         userId,
         cohortId,
         reservationMinutes: 15,
       });
-      enrollment = reservation.enrollment as any;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "";
+      if (message === "SEATS_EXHAUSTED") {
+        throw AppError.badRequest(
+          "All seats in this cohort have already been filled.",
+          "SEATS_EXHAUSTED"
+        );
+      }
+      if (message === "COHORT_NOT_FOUND") {
+        throw AppError.notFound("Cohort not found or is closed for enrolments.");
+      }
+      throw err;
     }
 
-    // 4. Determine Provider: Razorpay default for INR; Stripe for international
-    const provider = input.provider || (currency === "INR" ? "RAZORPAY" : "STRIPE");
-
-    // 5. Generate provider order id
-    // In test mode: generate structured provider order ID
-    let orderId: string;
-    let clientSecret: string | undefined;
-
-    if (provider === "RAZORPAY") {
-      // Razorpay order id format: order_XXXXXXXXXXXXXXXX
-      orderId = `order_${Date.now().toString(36)}_${crypto.randomBytes(4).toString("hex")}`;
-    } else {
-      // Stripe payment intent id: pi_XXXXXXXXXXXXXXXX
-      orderId = `pi_${Date.now().toString(36)}_${crypto.randomBytes(4).toString("hex")}`;
-      clientSecret = `${orderId}_secret_${crypto.randomBytes(12).toString("hex")}`;
+    const enrollment = reservation.enrollment;
+    if (enrollment.status === "ACTIVE" || enrollment.status === "COMPLETED") {
+      throw AppError.conflict("You are already enrolled in this cohort.");
     }
+
+    // 5. Create the Cashfree order and obtain the checkout session
+    const orderId = `order_cf_${Date.now().toString(36)}_${crypto.randomBytes(4).toString("hex")}`;
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { studentProfile: { select: { phone: true } } },
+    });
+    const phoneDigits = (user?.studentProfile?.phone || "").replace(/\D/g, "").slice(-10);
+
+    const cfOrder = await CashfreeService.createOrder({
+      orderId,
+      amount: amount / 100, // paise to INR
+      currency: "INR",
+      customer: {
+        customerId: userId,
+        customerName: user?.name || "ByteHUB Student",
+        customerEmail: user?.email || "student@bytehub.dev",
+        customerPhone: phoneDigits.length === 10 ? phoneDigits : undefined,
+      },
+      notifyUrl: env.API_PUBLIC_URL
+        ? `${env.API_PUBLIC_URL.replace(/\/$/, "")}/api/payments/webhooks/cashfree`
+        : undefined,
+    });
+    const paymentSessionId = cfOrder.paymentSessionId;
 
     // 6. Record Payment in database in CREATED status
     const payment = await paymentRepository.create({
@@ -114,7 +189,8 @@ export class PaymentService {
       metadata: {
         programmeTitle: cohort.programme?.title,
         cohortCode: cohort.cohortCode,
-        enrollmentId: enrollment?.id,
+        enrollmentId: enrollment.id,
+        paymentSessionId,
       },
     });
 
@@ -124,14 +200,46 @@ export class PaymentService {
       currency: payment.currency,
       provider: payment.provider,
       status: payment.status,
-      // Only send public keys to browser
-      keyId: provider === "RAZORPAY" ? env.RAZORPAY_KEY_ID : undefined,
-      publishableKey: provider === "STRIPE" ? env.STRIPE_PUBLISHABLE_KEY : undefined,
-      clientSecret,
+      // Session token for the Cashfree browser SDK
+      paymentSessionId,
+      cashfreeEnv: this.cashfreeEnvironment(),
+      isTestMode: isCashfreeMockMode(),
+      reservedUntil: enrollment.reservedUntil,
       programmeTitle: cohort.programme?.title,
       cohortCode: cohort.cohortCode,
       seatsLeft: cohort.seatsLeft,
     };
+  }
+
+  private cashfreeEnvironment(): "PRODUCTION" | "SANDBOX" {
+    return env.CASHFREE_SECRET_KEY.includes("_prod_") || env.CASHFREE_ENV === "PRODUCTION"
+      ? "PRODUCTION"
+      : "SANDBOX";
+  }
+
+  /**
+   * Sends the receipt and enrolment confirmation once a payment is captured.
+   * Never throws: a mail problem must not undo a confirmed payment.
+   */
+  private async notifyPaymentConfirmed(orderId: string): Promise<void> {
+    try {
+      const payment = await paymentRepository.findByOrderId(orderId);
+      if (!payment || payment.status !== PaymentStatus.PAID) return;
+
+      await notificationService.sendPaymentConfirmed({
+        studentName: payment.user.name,
+        studentEmail: payment.user.email,
+        programmeTitle: payment.cohort?.programme?.title || "Training Programme",
+        cohortCode: payment.cohort?.cohortCode || "COHORT",
+        orderId: payment.orderId,
+        amountMinor: payment.amount,
+        currency: payment.currency,
+        startDate: payment.cohort?.startDate,
+        mode: payment.cohort?.mode,
+      });
+    } catch (err) {
+      logger.error({ err, orderId }, "Failed to send payment confirmation emails");
+    }
   }
 
   /**
@@ -139,6 +247,10 @@ export class PaymentService {
    * Source of truth: verified webhook payload against RAW body.
    */
   async handleRazorpayWebhook(rawBody: Buffer | string, signatureHeader: string) {
+    if (!isRazorpayConfigured()) {
+      throw AppError.badRequest("Razorpay is not enabled on this server.");
+    }
+
     // 1. Verify HMAC SHA-256 signature
     const isValid = verifyRazorpayWebhookSignature(
       rawBody,
@@ -199,7 +311,7 @@ export class PaymentService {
       assertAmountIntegrity(payment.amount, receivedAmount, orderId);
 
       // Validate state transition
-      validateStateTransition(payment.status as any, PaymentStatus.PAID, orderId);
+      validateStateTransition(payment.status, PaymentStatus.PAID, orderId);
 
       // ACID transaction: confirm payment and activate enrolment
       const result = await paymentRepository.fulfillPaymentAndEnrolment({
@@ -261,6 +373,10 @@ export class PaymentService {
    * Source of truth: verified webhook payload against RAW body.
    */
   async handleStripeWebhook(rawBody: Buffer | string, signatureHeader: string) {
+    if (!isStripeConfigured()) {
+      throw AppError.badRequest("Stripe is not enabled on this server.");
+    }
+
     // 1. Verify Stripe signature
     const isValid = verifyStripeWebhookSignature(
       rawBody,
@@ -314,7 +430,7 @@ export class PaymentService {
       assertAmountIntegrity(payment.amount, receivedAmount, orderId);
 
       // Validate legal state transition
-      validateStateTransition(payment.status as any, PaymentStatus.PAID, orderId);
+      validateStateTransition(payment.status, PaymentStatus.PAID, orderId);
 
       const result = await paymentRepository.fulfillPaymentAndEnrolment({
         paymentId: payment.id,
@@ -382,6 +498,10 @@ export class PaymentService {
   }) {
     const { orderId, razorpayPaymentId, razorpaySignature, requestingUserId } = params;
 
+    if (!isRazorpayConfigured()) {
+      throw AppError.badRequest("Razorpay is not enabled on this server.");
+    }
+
     const isValid = verifyRazorpayPaymentSignature(
       orderId,
       razorpayPaymentId,
@@ -399,7 +519,9 @@ export class PaymentService {
     }
 
     if (requestingUserId && payment.userId !== requestingUserId) {
-      throw AppError.forbidden("Access denied: You cannot verify a payment session belonging to another user.");
+      throw AppError.forbidden(
+        "Access denied: You cannot verify a payment session belonging to another user."
+      );
     }
 
     // Transition from CREATED to PENDING while webhook arrives
@@ -418,9 +540,307 @@ export class PaymentService {
   }
 
   /**
+   * Confirms a Cashfree order that the gateway reports as paid.
+   * Walks the state machine (CREATED -> PENDING -> PAID), tolerates the webhook and the
+   * browser callback racing each other, and sends the receipt exactly once.
+   */
+  private async confirmCashfreePayment(params: {
+    orderId: string;
+    gatewayPaymentId: string;
+    gatewaySignature: string;
+    eventId: string;
+    paidAmountMajor?: number;
+    paidCurrency?: string;
+  }): Promise<{
+    status: "confirmed" | "already_paid" | "requires_review";
+    orderId: string;
+  }> {
+    const { orderId } = params;
+    const payment = await paymentRepository.findByOrderId(orderId);
+    if (!payment) {
+      throw AppError.notFound(`Payment order ${orderId} not found.`);
+    }
+
+    if (payment.status === PaymentStatus.PAID) {
+      return { status: "already_paid", orderId };
+    }
+
+    // The gateway is the source of truth for what was charged; it must match our ledger.
+    if (params.paidAmountMajor !== undefined) {
+      assertAmountIntegrity(
+        payment.amount,
+        Math.round(params.paidAmountMajor * 100),
+        orderId
+      );
+    }
+    if (
+      params.paidCurrency &&
+      params.paidCurrency.toUpperCase() !== payment.currency.toUpperCase()
+    ) {
+      throw AppError.badRequest(
+        `Currency mismatch for order '${orderId}'. Transaction aborted.`,
+        "AMOUNT_TAMPERED"
+      );
+    }
+
+    if (
+      payment.status !== PaymentStatus.CREATED &&
+      payment.status !== PaymentStatus.PENDING
+    ) {
+      // Money arrived for an order we already closed (failed/refunded). Never drop it silently.
+      logger.error(
+        {
+          orderId,
+          statusInDb: payment.status,
+          gatewayPaymentId: params.gatewayPaymentId,
+        },
+        "Gateway reports PAID for an order that is closed in the ledger — manual review required"
+      );
+      await prisma.auditLog
+        .create({
+          data: {
+            userId: payment.userId,
+            action: "PAYMENT_CAPTURED_AFTER_CLOSE",
+            entityType: "PAYMENT",
+            entityId: payment.id,
+            details: {
+              orderId,
+              statusInDb: payment.status,
+              gatewayPaymentId: params.gatewayPaymentId,
+            },
+          },
+        })
+        .catch(() => null);
+      await AlertService.sendAlert({
+        title: `Payment received for closed order ${orderId} — refund or re-activate manually`,
+        severity: "CRITICAL",
+        event: "PAYMENT_REVIEW_REQUIRED",
+        details: {
+          orderId,
+          statusInDb: payment.status,
+          gatewayPaymentId: params.gatewayPaymentId,
+        },
+      }).catch(() => null);
+      return { status: "requires_review", orderId };
+    }
+
+    try {
+      if (payment.status === PaymentStatus.CREATED) {
+        await paymentRepository.updateStatus(payment.id, PaymentStatus.PENDING, {
+          gatewayPaymentId: params.gatewayPaymentId,
+        });
+      }
+
+      await paymentRepository.fulfillPaymentAndEnrolment({
+        paymentId: payment.id,
+        orderId: payment.orderId,
+        userId: payment.userId,
+        cohortId: payment.cohortId,
+        gatewayPaymentId: params.gatewayPaymentId,
+        gatewaySignature: params.gatewaySignature,
+        eventId: params.eventId,
+      });
+    } catch (err) {
+      // The webhook and the browser callback can confirm the same order at the same moment.
+      const latest = await paymentRepository.findByOrderId(orderId);
+      if (latest?.status === PaymentStatus.PAID) {
+        return { status: "already_paid", orderId };
+      }
+      throw err;
+    }
+
+    await this.notifyPaymentConfirmed(orderId);
+    return { status: "confirmed", orderId };
+  }
+
+  /**
+   * Cashfree Webhook Handler
+   * Verifies signature against raw body and timestamp header.
+   */
+  async handleCashfreeWebhook(
+    rawBody: Buffer | string,
+    signatureHeader: string,
+    timestampHeader: string
+  ) {
+    // Unsigned webhooks are only tolerated in local mock mode (no real credentials, not production).
+    if (!isCashfreeMockMode()) {
+      const isValid = CashfreeService.verifyWebhookSignature(
+        rawBody,
+        timestampHeader,
+        signatureHeader
+      );
+      if (!isValid) {
+        await AlertService.notifyWebhookForgery({
+          provider: "CASHFREE",
+          receivedSignature: signatureHeader
+            ? `${String(signatureHeader).slice(0, 12)}…`
+            : "(missing)",
+        }).catch(() => null);
+        throw AppError.badRequest(
+          "Invalid Cashfree webhook signature.",
+          "INVALID_SIGNATURE"
+        );
+      }
+    }
+
+    const bodyText = Buffer.isBuffer(rawBody) ? rawBody.toString("utf8") : rawBody;
+    let payload: CashfreeWebhookPayload;
+    try {
+      payload = (
+        typeof bodyText === "string" ? JSON.parse(bodyText) : bodyText
+      ) as CashfreeWebhookPayload;
+    } catch {
+      throw AppError.badRequest("Malformed Cashfree webhook payload.");
+    }
+
+    const eventType: string | undefined = payload?.type || payload?.event;
+    const orderData = payload?.data?.order || payload?.order;
+    const paymentData = payload?.data?.payment || payload?.payment;
+    const orderId: string | undefined =
+      orderData?.order_id || payload?.order_id || payload?.orderId;
+
+    if (!orderId) {
+      return { status: "ignored_missing_order", eventType };
+    }
+
+    const cfPaymentId: string | undefined =
+      paymentData?.cf_payment_id?.toString() || paymentData?.payment_id?.toString();
+    // One id per (order, gateway payment, event type) so replays are deduplicated safely.
+    const eventId = `cf_${orderId}_${cfPaymentId || "na"}_${eventType || "unknown"}`;
+
+    if (eventType === "PAYMENT_SUCCESS_WEBHOOK" || eventType === "ORDER_PAID") {
+      if (paymentData?.payment_status && paymentData.payment_status !== "SUCCESS") {
+        return { status: "ignored_non_success_payment", orderId };
+      }
+
+      const payment = await paymentRepository.findByOrderId(orderId);
+      if (!payment) {
+        return { status: "ignored_unknown_order", orderId };
+      }
+
+      const paidAmount = orderData?.order_amount ?? paymentData?.payment_amount;
+      const result = await this.confirmCashfreePayment({
+        orderId,
+        gatewayPaymentId: cfPaymentId || `cf_order_${orderId}`,
+        gatewaySignature: signatureHeader || "cashfree_webhook",
+        eventId,
+        paidAmountMajor: paidAmount !== undefined ? Number(paidAmount) : undefined,
+        paidCurrency: orderData?.order_currency || paymentData?.payment_currency,
+      });
+
+      return { status: result.status, orderId };
+    }
+
+    if (
+      eventType === "PAYMENT_FAILED_WEBHOOK" ||
+      eventType === "PAYMENT_USER_DROPPED_WEBHOOK"
+    ) {
+      // A failed or abandoned *attempt* does not close the order: Cashfree lets the student
+      // retry inside the same order. The seat is released when the 15-minute hold expires.
+      logger.info(
+        { orderId, eventType, reason: paymentData?.payment_message },
+        "Cashfree payment attempt did not complete"
+      );
+      return { status: "payment_attempt_failed_noted", orderId };
+    }
+
+    return { status: "ignored_event_type", eventType };
+  }
+
+  /**
+   * Cashfree Client Callback Verification
+   * Called by the browser after the Cashfree checkout closes. The order state is always
+   * re-read from Cashfree's API — nothing the browser says is trusted.
+   */
+  async verifyCashfreeClient(params: { orderId: string; requestingUserId?: string }) {
+    const { orderId, requestingUserId } = params;
+    if (!orderId || typeof orderId !== "string") {
+      throw AppError.badRequest("orderId is required.");
+    }
+
+    const payment = await paymentRepository.findByOrderId(orderId);
+    if (!payment) {
+      throw AppError.notFound(`Payment order ${orderId} not found.`);
+    }
+
+    if (requestingUserId && payment.userId !== requestingUserId) {
+      throw AppError.forbidden("Access denied: You cannot verify another user's order.");
+    }
+
+    if (payment.status === PaymentStatus.PAID) {
+      return { status: "PAID", orderId };
+    }
+
+    if (payment.provider !== "CASHFREE") {
+      return { status: payment.status, orderId };
+    }
+
+    let cfOrder: CashfreeOrderStatus;
+    try {
+      cfOrder = await CashfreeService.getOrder(orderId);
+    } catch (err) {
+      // Gateway unreachable: report the ledger state and let the client keep polling.
+      logger.warn({ err, orderId }, "Could not read order status from Cashfree");
+      return { status: payment.status, orderId, gatewayReachable: false };
+    }
+
+    if (cfOrder?.order_status === "PAID") {
+      const isMock = cfOrder.mock === true && isCashfreeMockMode();
+      await this.confirmCashfreePayment({
+        orderId,
+        gatewayPaymentId: isMock
+          ? `cf_pay_mock_${Date.now()}`
+          : cfOrder.cf_order_id?.toString() || `cf_order_${orderId}`,
+        gatewaySignature: isMock ? "mock_mode_no_gateway" : "verified_via_cashfree_api",
+        eventId: `cf_${orderId}_client_verify`,
+        paidAmountMajor: isMock ? undefined : Number(cfOrder.order_amount),
+        paidCurrency: isMock ? undefined : cfOrder.order_currency,
+      });
+      return { status: "PAID", orderId };
+    }
+
+    return { status: payment.status, orderId, gatewayStatus: cfOrder?.order_status };
+  }
+
+  /**
+   * Lists the signed-in student's own payments (newest first).
+   */
+  async listUserPayments(userId: string) {
+    const payments = await prisma.payment.findMany({
+      where: { userId },
+      include: {
+        cohort: {
+          select: {
+            cohortCode: true,
+            programme: { select: { title: true, slug: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    });
+
+    return payments.map((p) => ({
+      id: p.id,
+      orderId: p.orderId,
+      amount: p.amount,
+      currency: p.currency,
+      status: p.status,
+      provider: p.provider,
+      createdAt: p.createdAt,
+      programmeTitle: p.cohort?.programme?.title || "Training Programme",
+      cohortCode: p.cohort?.cohortCode || null,
+    }));
+  }
+
+  /**
    * Client polls this endpoint to verify if the webhook confirmed the payment.
    */
-  async getPaymentStatus(orderId: string, requestingUserId: string, requestingRole: string) {
+  async getPaymentStatus(
+    orderId: string,
+    requestingUserId: string,
+    requestingRole: string
+  ) {
     const payment = await paymentRepository.findByOrderId(orderId);
     if (!payment) {
       throw AppError.notFound(`Payment order '${orderId}' not found.`);
@@ -428,7 +848,9 @@ export class PaymentService {
 
     // IDOR protection: only owner or admin can inspect
     if (payment.userId !== requestingUserId && requestingRole !== "ADMIN") {
-      throw AppError.forbidden("Access denied: You cannot inspect another student's payment.");
+      throw AppError.forbidden(
+        "Access denied: You cannot inspect another student's payment."
+      );
     }
 
     const enrollment = await prisma.enrollment.findFirst({
@@ -438,7 +860,7 @@ export class PaymentService {
       },
     });
 
-    let invoice: any = null;
+    let invoice: ReturnType<typeof generateInvoiceData> | null = null;
     if (payment.status === "PAID") {
       invoice = generateInvoiceData({
         paymentId: payment.id,
@@ -474,8 +896,16 @@ export class PaymentService {
   /**
    * Downloads tax invoice / receipt PDF.
    */
-  async downloadInvoicePdf(orderId: string, requestingUserId: string, requestingRole: string) {
-    const statusData = await this.getPaymentStatus(orderId, requestingUserId, requestingRole);
+  async downloadInvoicePdf(
+    orderId: string,
+    requestingUserId: string,
+    requestingRole: string
+  ) {
+    const statusData = await this.getPaymentStatus(
+      orderId,
+      requestingUserId,
+      requestingRole
+    );
     if (!statusData.isPaid || !statusData.invoice) {
       throw AppError.badRequest("Cannot generate invoice for unpaid or pending payment.");
     }
@@ -505,7 +935,7 @@ export class PaymentService {
       throw AppError.notFound("Payment not found");
     }
 
-    if (!canRefund(payment.status as any)) {
+    if (!canRefund(payment.status)) {
       throw AppError.badRequest(
         `Cannot refund payment in status '${payment.status}'. Only PAID or PARTIALLY_REFUNDED payments can be refunded.`
       );
@@ -539,11 +969,13 @@ export class PaymentService {
   }
 
   /**
-   * Nightly reconciliation job:
-   * Compares database CREATED/PENDING payments with provider records, alerting on mismatches.
+   * Reconciliation job:
+   * Re-checks every open (CREATED/PENDING) order against the gateway. Orders the gateway
+   * reports as paid are confirmed (covers a missed webhook); orders still unpaid after an
+   * hour are failed and their seat released.
    */
   async reconcileNightly() {
-    const stalePayments = await paymentRepository.findStalePaymentsForReconciliation(24);
+    const openPayments = await paymentRepository.findOpenPaymentsOlderThan(30);
     const report: Array<{
       orderId: string;
       provider: string;
@@ -551,27 +983,54 @@ export class PaymentService {
       actionTaken: string;
     }> = [];
 
-    for (const p of stalePayments) {
-      // In test mode, if older than 2 hours and still CREATED/PENDING, transition to FAILED and release seat
-      const ageHours = (Date.now() - new Date(p.createdAt).getTime()) / (1000 * 60 * 60);
-      if (ageHours > 1) {
-        await paymentRepository.failPaymentAndReleaseSeat({
-          paymentId: p.id,
-          orderId: p.orderId,
-          reason: "Nightly reconciliation: order expired without gateway payment capture.",
-        });
+    for (const p of openPayments) {
+      let actionTaken = "LEFT_OPEN";
 
-        report.push({
-          orderId: p.orderId,
-          provider: p.provider,
-          statusInDb: p.status,
-          actionTaken: "AUTO_FAILED_AND_SEAT_RELEASED",
-        });
+      try {
+        let confirmedFromGateway = false;
+
+        if (p.provider === "CASHFREE" && !isCashfreeMockMode()) {
+          const cfOrder = await CashfreeService.getOrder(p.orderId);
+          if (cfOrder?.order_status === "PAID") {
+            const result = await this.confirmCashfreePayment({
+              orderId: p.orderId,
+              gatewayPaymentId:
+                cfOrder.cf_order_id?.toString() || `cf_order_${p.orderId}`,
+              gatewaySignature: "verified_via_reconciliation",
+              eventId: `cf_${p.orderId}_reconcile`,
+              paidAmountMajor: Number(cfOrder.order_amount),
+              paidCurrency: cfOrder.order_currency,
+            });
+            actionTaken = `CONFIRMED_FROM_GATEWAY:${result.status}`;
+            confirmedFromGateway = true;
+          }
+        }
+
+        const ageHours =
+          (Date.now() - new Date(p.createdAt).getTime()) / (1000 * 60 * 60);
+        if (!confirmedFromGateway && ageHours > 1) {
+          await paymentRepository.failPaymentAndReleaseSeat({
+            paymentId: p.id,
+            orderId: p.orderId,
+            reason: "Reconciliation: order expired without gateway payment capture.",
+          });
+          actionTaken = "AUTO_FAILED_AND_SEAT_RELEASED";
+        }
+      } catch (err) {
+        logger.error({ err, orderId: p.orderId }, "Reconciliation failed for order");
+        actionTaken = `ERROR:${err instanceof Error ? err.message : "unknown"}`;
       }
+
+      report.push({
+        orderId: p.orderId,
+        provider: p.provider,
+        statusInDb: p.status,
+        actionTaken,
+      });
     }
 
     return {
-      reconciledCount: stalePayments.length,
+      reconciledCount: openPayments.length,
       actions: report,
       timestamp: new Date().toISOString(),
     };

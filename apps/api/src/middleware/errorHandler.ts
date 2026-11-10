@@ -1,7 +1,9 @@
 import { Request, Response, NextFunction } from "express";
 import { ZodError } from "zod";
 import { AppError } from "../utils/apiError.js";
+export { AppError };
 import { logger } from "../utils/logger.js";
+import { SentryService } from "../config/sentry.js";
 
 export function errorHandler(
   err: Error,
@@ -13,18 +15,25 @@ export function errorHandler(
   const requestId = req.id || "unknown";
 
   // 1. Zod Validation Errors (Unknown fields, type mismatches, missing required)
-  if (err instanceof ZodError) {
-    const formatted = err.issues.map((i) => {
-      const field = i.path.join(".");
-      return field ? `${field}: ${i.message}` : i.message;
-    }).join(", ");
+  const maybeIssues = (err as { issues?: unknown }).issues;
+  if (err instanceof ZodError || err.name === "ZodError" || Array.isArray(maybeIssues)) {
+    const issues = (Array.isArray(maybeIssues) ? maybeIssues : []) as Array<{
+      path?: (string | number)[];
+      message: string;
+    }>;
+    const formatted = issues
+      .map((i) => {
+        const field = i.path ? i.path.join(".") : "";
+        return field ? `${field}: ${i.message}` : i.message;
+      })
+      .join(", ");
 
     logger.warn({ requestId, err: formatted }, "Validation Error");
 
     res.status(400).json({
       error: {
         code: "VALIDATION_ERROR",
-        message: formatted,
+        message: formatted || err.message,
         requestId,
       },
     });
@@ -33,6 +42,16 @@ export function errorHandler(
 
   // 2. Custom Application Errors (Controlled operational errors)
   if (err instanceof AppError) {
+    // 5xx AppErrors (e.g. payment gateway unreachable) still need a human to look at them.
+    if (err.statusCode >= 500) {
+      SentryService.captureException(err, {
+        tags: { code: err.code },
+        requestId,
+        method: req.method,
+        path: req.path,
+      });
+    }
+
     logger.warn(
       {
         requestId,
@@ -55,14 +74,11 @@ export function errorHandler(
 
   // 3. Unhandled Server Errors (Database connection, unexpected runtime bugs)
   // NEVER leak database details, SQL statements, or stack traces in responses
-  logger.error(
-    {
-      requestId,
-      message: err.message,
-      stack: isProduction ? undefined : err.stack,
-    },
-    "Unhandled Internal Server Error"
-  );
+  SentryService.captureException(err, {
+    requestId,
+    method: req.method,
+    path: req.path,
+  });
 
   const safeMessage = isProduction
     ? `An unexpected server error occurred. Please contact support with correlation ID: ${requestId}`

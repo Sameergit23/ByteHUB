@@ -8,13 +8,10 @@ import {
   UpdateApplicationStatusSchema,
 } from "@bytehub/shared";
 
-export const applicationsRouter = Router();
+export const applicationsRouter: Router = Router();
 
 // Secure signed resume download (token-authenticated via HMAC & expiry)
-applicationsRouter.get(
-  "/resume-download",
-  ApplicationController.downloadResumeFile
-);
+applicationsRouter.get("/resume-download", ApplicationController.downloadResumeFile);
 
 // Student: Submit application
 applicationsRouter.post(
@@ -41,12 +38,16 @@ applicationsRouter.post(
   ApplicationController.withdraw
 );
 
-// Student, Company, Admin: Download / view resume (guarded against IDOR)
+// Company & Admin: every application across the company's own postings
 applicationsRouter.get(
-  "/:id/resume",
+  "/company",
   authenticateJWT,
-  ApplicationController.getResume
+  requireRoles("COMPANY", "ADMIN"),
+  ApplicationController.getCompanyApplications
 );
+
+// Student, Company, Admin: Download / view resume (guarded against IDOR)
+applicationsRouter.get("/:id/resume", authenticateJWT, ApplicationController.getResume);
 
 // Resume upload with magic bytes verification and rate limiting
 applicationsRouter.post(

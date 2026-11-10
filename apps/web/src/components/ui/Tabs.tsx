@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from "react";
+import React, { useRef } from "react";
 
 export interface TabItem {
   id: string;
@@ -75,4 +75,3 @@ export const Tabs: React.FC<TabsProps> = ({
     </div>
   );
 };
-

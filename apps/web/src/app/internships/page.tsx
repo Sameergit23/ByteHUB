@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Chip } from "../../components/ui/Chip";
 import { Button } from "../../components/ui/Button";
 import { ColophonFooter } from "../../components/layout/ColophonFooter";
-import { MOCK_INTERNSHIPS } from "../../lib/mockData";
+import { getInternships } from "../../lib/catalog";
 
 export const metadata: Metadata = {
   title: "Open Internships — ByteHUB",
@@ -17,7 +17,7 @@ export const metadata: Metadata = {
   },
 };
 
-export default function InternshipsPage({
+export default async function InternshipsPage({
   searchParams,
 }: {
   searchParams?: {
@@ -33,16 +33,32 @@ export default function InternshipsPage({
   const mode = searchParams?.mode || "ANY";
   const duration = searchParams?.duration || "ANY";
 
+  const internships = await getInternships();
+  const isUnavailable = internships === null;
+  const allInternships = internships ?? [];
+
+  // Track options come from the live listings, so the filter never offers an empty track.
+  const trackOptions = Array.from(
+    new Set(allInternships.map((item) => item.track))
+  ).sort();
+
   // Filter driven by URL query params (Server-side rendered, crawlable & shareable)
-  const filtered = MOCK_INTERNSHIPS.filter((item) => {
+  const filtered = allInternships.filter((item) => {
     const matchesSearch =
       search === "" ||
       item.title.toLowerCase().includes(search) ||
-      item.track.toLowerCase().includes(search);
+      item.companyName.toLowerCase().includes(search) ||
+      item.track.toLowerCase().includes(search) ||
+      item.skills.some((skill) => skill.toLowerCase().includes(search));
 
     const matchesTrack = track === "ALL" || item.track === track;
+    const matchesMode = mode === "ANY" || item.typeCode === mode;
+    const matchesDuration =
+      duration === "ANY" ||
+      (duration === "SHORT" && item.durationMonths <= 2) ||
+      (duration === "LONG" && item.durationMonths >= 3);
 
-    return matchesSearch && matchesTrack;
+    return matchesSearch && matchesTrack && matchesMode && matchesDuration;
   });
 
   return (
@@ -54,7 +70,8 @@ export default function InternshipsPage({
             Open internships
           </h1>
           <p className="font-sans text-sm sm:text-base text-editorial-muted max-w-2xl leading-relaxed">
-            Apply to live projects with mentors. Complete training first to improve your chances.
+            Apply to live projects with mentors. Complete training first to improve your
+            chances.
           </p>
         </div>
 
@@ -111,10 +128,11 @@ export default function InternshipsPage({
               className="w-full min-h-[44px] px-3 py-2.5 text-sm bg-white text-ink border border-editorial-border hover:border-ink cursor-pointer focus-visible:outline-2 focus-visible:outline-ink"
             >
               <option value="ALL">All tracks</option>
-              <option value="Web Development">Web Development</option>
-              <option value="App Development">App Development</option>
-              <option value="Data & AI">Data & AI</option>
-              <option value="UI/UX Design">UI/UX Design</option>
+              {trackOptions.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -133,6 +151,7 @@ export default function InternshipsPage({
             >
               <option value="ANY">Any</option>
               <option value="REMOTE">Remote</option>
+              <option value="HYBRID">Hybrid</option>
               <option value="ON_SITE">On-site</option>
             </select>
           </div>
@@ -152,8 +171,8 @@ export default function InternshipsPage({
                 className="w-full min-h-[44px] px-3 py-2.5 text-sm bg-white text-ink border border-editorial-border hover:border-ink cursor-pointer focus-visible:outline-2 focus-visible:outline-ink"
               >
                 <option value="ANY">Any</option>
-                <option value="SHORT">4-8 Weeks</option>
-                <option value="LONG">12-24 Weeks</option>
+                <option value="SHORT">Up to 2 months</option>
+                <option value="LONG">3 months or more</option>
               </select>
               <button
                 type="submit"
@@ -168,8 +187,27 @@ export default function InternshipsPage({
 
         {/* Count Label Matching Image 3 */}
         <div className="font-mono text-xs text-editorial-muted pt-1">
-          {filtered.length} open roles
+          {filtered.length} open {filtered.length === 1 ? "role" : "roles"}
         </div>
+
+        {isUnavailable && (
+          <div
+            role="alert"
+            className="p-4 border border-accent bg-[#FBEBE8] text-accent text-xs font-mono"
+          >
+            [ NOTICE ]: Listings could not be loaded right now. Please refresh in a
+            moment.
+          </div>
+        )}
+
+        {!isUnavailable && filtered.length === 0 && (
+          <div className="p-6 border border-editorial-border bg-white text-sm text-editorial-muted">
+            No internships match these filters.{" "}
+            <Link href="/internships" className="text-ink underline underline-offset-4">
+              Clear filters
+            </Link>
+          </div>
+        )}
 
         {/* Tabular Rows Matching Image 3 */}
         <div className="border-t border-editorial-border divide-y divide-editorial-border">
@@ -181,10 +219,7 @@ export default function InternshipsPage({
               {/* Role Title and Track Chip */}
               <div className="md:col-span-6 space-y-2">
                 <h2 className="font-heading text-lg sm:text-xl font-bold text-ink">
-                  <Link
-                    href={`/internships/${item.slug}`}
-                    className="hover:text-accent"
-                  >
+                  <Link href={`/internships/${item.slug}`} className="hover:text-accent">
                     {item.title}
                   </Link>
                 </h2>

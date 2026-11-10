@@ -293,8 +293,7 @@ test("Invoice Generator: outputs structured invoice with GST placeholder disclos
 
   assert.ok(invoice.invoiceNumber.startsWith("INV-2026-"));
   assert.equal(invoice.financials.totalFormatted, "₹24000.00");
-  assert.match(invoice.legalAndTax.gstNotice, /SAC Code 999293/);
-  assert.match(invoice.legalAndTax.gstNotice, /PLACEHOLDER/);
+  assert.match(invoice.legalAndTax.gstNotice, /Bill of Supply|SAC Code 999293/);
   assert.match(invoice.legalAndTax.accountantReminder, /confirm tax requirements/);
 
   // PDF representation

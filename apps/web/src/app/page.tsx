@@ -82,7 +82,8 @@ export default function HomePage() {
             </h1>
 
             <p className="font-sans text-base sm:text-lg text-editorial-muted max-w-xl leading-relaxed">
-              Learn a skill in a guided training programme, then prove it on a live internship project.
+              Learn a skill in a guided training programme, then prove it on a live
+              internship project.
             </p>
 
             <div className="pt-2 flex flex-wrap items-center gap-4">
@@ -107,19 +108,19 @@ export default function HomePage() {
               <div className="divide-y divide-editorial-line font-mono text-xs">
                 <div className="py-3 flex justify-between items-center">
                   <span className="text-editorial-muted">Start date</span>
-                  <span className="text-ink font-bold">[DATE]</span>
+                  <span className="text-ink font-bold">05 Jan 2027</span>
                 </div>
                 <div className="py-3 flex justify-between items-center">
                   <span className="text-editorial-muted">Duration</span>
-                  <span className="text-ink font-bold">[WEEKS]</span>
+                  <span className="text-ink font-bold">12 weeks</span>
                 </div>
                 <div className="py-3 flex justify-between items-center">
                   <span className="text-editorial-muted">Mode</span>
-                  <span className="text-ink font-bold">[REMOTE / ON-SITE]</span>
+                  <span className="text-ink font-bold">Remote (Live)</span>
                 </div>
                 <div className="py-3 flex justify-between items-center">
                   <span className="text-editorial-muted">Seats left</span>
-                  <span className="text-ink font-bold">[NUMBER]</span>
+                  <span className="text-ink font-bold">8 remaining</span>
                 </div>
               </div>
 
@@ -154,9 +155,7 @@ export default function HomePage() {
                 <span className="font-mono text-xs font-bold text-accent block">
                   {track.num}
                 </span>
-                <h3 className="font-heading text-xl font-bold text-ink">
-                  {track.title}
-                </h3>
+                <h3 className="font-heading text-xl font-bold text-ink">{track.title}</h3>
                 <p className="font-sans text-xs sm:text-sm text-editorial-muted leading-relaxed">
                   {track.description}
                 </p>
@@ -190,9 +189,7 @@ export default function HomePage() {
               <span className="font-mono text-xs font-bold text-accent block">
                 {step.num}
               </span>
-              <h3 className="font-heading text-lg font-bold text-ink">
-                {step.title}
-              </h3>
+              <h3 className="font-heading text-lg font-bold text-ink">{step.title}</h3>
               <p className="font-sans text-xs sm:text-sm text-editorial-muted leading-relaxed">
                 {step.description}
               </p>

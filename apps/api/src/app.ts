@@ -1,4 +1,5 @@
 import express, { Express, Request, Response, NextFunction } from "express";
+import type { IncomingMessage } from "node:http";
 import helmet from "helmet";
 import cors from "cors";
 import { env } from "./config/env.js";
@@ -7,11 +8,7 @@ import { pinoHttpMiddleware } from "./middleware/pinoHttp.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { cookieParserMiddleware } from "./middleware/auth.js";
 import { csrfProtection } from "./middleware/csrf.js";
-import {
-  globalRateLimiter,
-  authRateLimiter,
-  paymentRateLimiter,
-} from "./middleware/rateLimiter.js";
+import { globalRateLimiter } from "./middleware/rateLimiter.js";
 
 import { healthRouter } from "./routes/health.routes.js";
 import { authRouter } from "./routes/auth.routes.js";
@@ -20,9 +17,14 @@ import { trainingRouter } from "./routes/training.routes.js";
 import { applicationsRouter } from "./routes/applications.routes.js";
 import { paymentsRouter } from "./routes/payments.routes.js";
 import { adminRouter } from "./routes/admin.routes.js";
+import { contactRouter, inquiriesRouter } from "./routes/contact.routes.js";
 
 export const createApp = (): Express => {
   const app = express();
+
+  // Behind the Next.js proxy / a load balancer the client IP arrives in X-Forwarded-For.
+  // Trusting the configured number of hops keeps rate limits and audit logs per-client.
+  app.set("trust proxy", env.TRUST_PROXY);
 
   // 1. Request ID & Structured Logging
   app.use(requestIdMiddleware);
@@ -39,17 +41,25 @@ export const createApp = (): Express => {
           defaultSrc: ["'self'"],
           scriptSrc: [
             "'self'",
+            "https://sdk.cashfree.com",
             "https://checkout.razorpay.com",
             "https://js.stripe.com",
           ],
           connectSrc: [
             "'self'",
+            "https://api.cashfree.com",
+            "https://sandbox.cashfree.com",
+            "https://payments.cashfree.com",
+            "https://payments-test.cashfree.com",
             "https://api.razorpay.com",
             "https://lumberjack.razorpay.com",
             "https://api.stripe.com",
           ],
           frameSrc: [
             "'self'",
+            "https://sdk.cashfree.com",
+            "https://payments.cashfree.com",
+            "https://payments-test.cashfree.com",
             "https://api.razorpay.com",
             "https://js.stripe.com",
             "https://hooks.stripe.com",
@@ -135,12 +145,16 @@ export const createApp = (): Express => {
   // 6. Global Rate Limiter
   app.use("/api", globalRateLimiter);
 
+  // 7a. Resume uploads carry a base64 file (max 5 MB => ~6.7 MB of JSON), so that one
+  //     route gets a larger limit. Every other route keeps the strict 100kb cap below.
+  app.use("/api/applications/upload-resume", express.json({ limit: "7mb" }));
+
   // 7. Request Body Parser with Strict 100kb Size Limit (Preserves raw buffer for webhooks)
   app.use(
     express.json({
       limit: "100kb",
       verify: (req, _res, buf) => {
-        (req as any).rawBody = buf;
+        (req as IncomingMessage & { rawBody?: Buffer }).rawBody = buf;
       },
     })
   );
@@ -157,8 +171,10 @@ export const createApp = (): Express => {
   app.use("/api/internships", internshipsRouter);
   app.use("/api/training", trainingRouter);
   app.use("/api/applications", applicationsRouter);
-  app.use("/api/payments", paymentRateLimiter, paymentsRouter);
+  app.use("/api/payments", paymentsRouter);
   app.use("/api/admin", adminRouter);
+  app.use("/api/contact", contactRouter);
+  app.use("/api/inquiries", inquiriesRouter);
 
   // 11. Route Not Found (404)
   app.use((_req, res) => {

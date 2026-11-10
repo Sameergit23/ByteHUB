@@ -16,6 +16,7 @@ function decodeJwtPayload(token: string): TokenPayload | null {
     const parts = token.split(".");
     if (parts.length !== 3) return null;
     const base64Url = parts[1];
+    if (!base64Url) return null;
     const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
     const jsonPayload = Buffer.from(base64, "base64").toString("utf8");
     return JSON.parse(jsonPayload);
@@ -71,10 +72,13 @@ export function middleware(request: NextRequest) {
   }
 
   // 4. Role-specific boundaries
-  if (isAdminRoute && role !== "ADMIN") {
+  if (isAdminRoute) {
     // Non-admin attempting to access admin portal
     return NextResponse.redirect(
-      new URL(role === "COMPANY" ? "/dashboard/company" : "/dashboard/student", request.url)
+      new URL(
+        role === "COMPANY" ? "/dashboard/company" : "/dashboard/student",
+        request.url
+      )
     );
   }
 
@@ -90,10 +94,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    "/dashboard/student/:path*",
-    "/dashboard/company/:path*",
-    "/admin/:path*",
-  ],
+  matcher: ["/dashboard/student/:path*", "/dashboard/company/:path*", "/admin/:path*"],
 };
-

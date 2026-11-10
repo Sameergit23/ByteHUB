@@ -7,9 +7,13 @@ export class PaymentController {
    * POST /api/payments/create-intent
    * Creates a provider order or PaymentIntent with server-enforced pricing.
    */
-  static async createIntent(req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async createIntent(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
     try {
-      const userId = (req as any).user?.id;
+      const userId = req.user?.id;
       if (!userId) {
         throw AppError.unauthorized("Authentication required.");
       }
@@ -22,7 +26,9 @@ export class PaymentController {
         throw AppError.badRequest("cohortId is required.");
       }
       if (!idempotencyKey) {
-        throw AppError.badRequest("X-Idempotency-Key header or idempotencyKey body field is required.");
+        throw AppError.badRequest(
+          "X-Idempotency-Key header or idempotencyKey body field is required."
+        );
       }
 
       const data = await paymentService.createPaymentIntent(userId, {
@@ -38,10 +44,39 @@ export class PaymentController {
   }
 
   /**
+   * POST /api/payments/webhooks/cashfree
+   * Raw request body verified against x-webhook-signature and x-webhook-timestamp.
+   */
+  static async cashfreeWebhook(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const signatureHeader = req.headers["x-webhook-signature"] as string;
+      const timestampHeader = req.headers["x-webhook-timestamp"] as string;
+      const rawBody = req.rawBody || req.body;
+
+      const result = await paymentService.handleCashfreeWebhook(
+        rawBody,
+        signatureHeader,
+        timestampHeader
+      );
+      res.status(200).json({ status: "success", data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
    * POST /api/payments/webhooks/razorpay
    * Raw request body verified against X-Razorpay-Signature HMAC SHA256.
    */
-  static async razorpayWebhook(req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async razorpayWebhook(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
     try {
       const signatureHeader = req.headers["x-razorpay-signature"] as string;
       if (!signatureHeader) {
@@ -55,7 +90,7 @@ export class PaymentController {
       }
 
       // Use rawBody buffer captured by express.raw or verify middleware
-      const rawBody = (req as any).rawBody || req.body;
+      const rawBody = req.rawBody || req.body;
 
       const result = await paymentService.handleRazorpayWebhook(rawBody, signatureHeader);
       res.status(200).json({ status: "success", data: result });
@@ -68,7 +103,11 @@ export class PaymentController {
    * POST /api/payments/webhooks/stripe
    * Raw request body verified against Stripe-Signature header.
    */
-  static async stripeWebhook(req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async stripeWebhook(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
     try {
       const signatureHeader = req.headers["stripe-signature"] as string;
       if (!signatureHeader) {
@@ -81,7 +120,7 @@ export class PaymentController {
         return;
       }
 
-      const rawBody = (req as any).rawBody || req.body;
+      const rawBody = req.rawBody || req.body;
 
       const result = await paymentService.handleStripeWebhook(rawBody, signatureHeader);
       res.status(200).json({ status: "success", data: result });
@@ -94,9 +133,13 @@ export class PaymentController {
    * POST /api/payments/razorpay/verify-client
    * Immediate callback for client modal UI while webhook confirms in background.
    */
-  static async verifyClient(req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async verifyClient(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
     try {
-      const userId = (req as any).user?.id || (req as any).user?.userId;
+      const userId = req.user?.id;
       const { orderId, razorpayPaymentId, razorpaySignature } = req.body;
       const data = await paymentService.verifyClientCheckout({
         orderId,
@@ -111,14 +154,56 @@ export class PaymentController {
   }
 
   /**
+   * POST /api/payments/cashfree/verify-client
+   * Instant confirmation callback after Cashfree checkout completion.
+   */
+  static async verifyCashfreeClient(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      const { orderId } = req.body;
+      const data = await paymentService.verifyCashfreeClient({
+        orderId,
+        requestingUserId: userId,
+      });
+      res.status(200).json({ status: "success", data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * GET /api/payments/my
+   * The signed-in user's own payment history.
+   */
+  static async listMine(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        throw AppError.unauthorized("Authentication required.");
+      }
+      const data = await paymentService.listUserPayments(userId);
+      res.status(200).json({ status: "success", data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
    * GET /api/payments/status/:orderId
    * Polled by client success page (source of truth is the verified webhook).
    */
   static async getStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const userId = (req as any).user?.id;
-      const userRole = (req as any).user?.role;
-      const { orderId } = req.params;
+      const userId = req.user!.id;
+      const userRole = req.user!.role;
+      const orderId = req.params.orderId;
+      if (!orderId) {
+        throw new AppError("Order ID is required", 400, "BAD_REQUEST");
+      }
 
       const data = await paymentService.getPaymentStatus(orderId, userId, userRole);
       res.status(200).json({ status: "success", data });
@@ -131,13 +216,24 @@ export class PaymentController {
    * GET /api/payments/:orderId/invoice
    * Downloads tax receipt / invoice PDF with [GST DETAILS] placeholder.
    */
-  static async downloadInvoice(req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async downloadInvoice(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
     try {
-      const userId = (req as any).user?.id;
-      const userRole = (req as any).user?.role;
-      const { orderId } = req.params;
+      const userId = req.user!.id;
+      const userRole = req.user!.role;
+      const orderId = req.params.orderId;
+      if (!orderId) {
+        throw new AppError("Order ID is required", 400, "BAD_REQUEST");
+      }
 
-      const pdfBuffer = await paymentService.downloadInvoicePdf(orderId, userId, userRole);
+      const pdfBuffer = await paymentService.downloadInvoicePdf(
+        orderId,
+        userId,
+        userRole
+      );
 
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader(
@@ -156,11 +252,13 @@ export class PaymentController {
    */
   static async refund(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const adminUserId = (req as any).user?.id;
-      const adminRole = (req as any).user?.role;
+      const adminUserId = req.user!.id;
+      const adminRole = req.user?.role;
 
       if (adminRole !== "ADMIN") {
-        throw AppError.forbidden("Access denied: Admin privileges required to issue refunds.");
+        throw AppError.forbidden(
+          "Access denied: Admin privileges required to issue refunds."
+        );
       }
 
       const { paymentId, amount, reason } = req.body;
@@ -182,7 +280,7 @@ export class PaymentController {
    */
   static async reconcile(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const adminRole = (req as any).user?.role;
+      const adminRole = req.user?.role;
       if (adminRole !== "ADMIN") {
         throw AppError.forbidden("Admin role required to trigger reconciliation.");
       }

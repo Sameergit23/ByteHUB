@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { AppError } from "../utils/apiError.js";
 import {
@@ -13,7 +14,7 @@ export class InternshipService {
   async listInternships(filters: InternshipFilter) {
     const limit = Math.min(filters.limit || 10, 50);
 
-    const where: any = {
+    const where: Prisma.InternshipWhereInput = {
       status: "PUBLISHED",
       deletedAt: null,
     };
@@ -42,7 +43,7 @@ export class InternshipService {
       ];
     }
 
-    const queryOptions: any = {
+    const queryOptions: Prisma.InternshipFindManyArgs = {
       where,
       take: limit + 1, // Take one extra to determine nextCursor
       orderBy: { createdAt: "desc" },
@@ -74,6 +75,20 @@ export class InternshipService {
   }
 
   /**
+   * A company's own postings (any status) with how many candidates applied to each.
+   */
+  async listCompanyInternships(companyId: string) {
+    return prisma.internship.findMany({
+      where: { companyId, deletedAt: null },
+      include: {
+        track: { select: { id: true, slug: true, name: true } },
+        _count: { select: { applications: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  /**
    * Detail by slug or UUID
    */
   async getInternshipBySlugOrId(slugOrId: string) {
@@ -81,6 +96,7 @@ export class InternshipService {
       where: {
         OR: [{ slug: slugOrId }, { id: slugOrId }],
         deletedAt: null,
+        status: "PUBLISHED",
       },
       include: {
         track: true,
@@ -105,12 +121,17 @@ export class InternshipService {
   /**
    * Company creates internship (defaults to DRAFT pending Admin approval)
    */
-  async createInternship(companyId: string, userRole: string, input: CreateInternshipInput) {
-    const slug = input.title
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "") + `-${Date.now().toString(36)}`;
+  async createInternship(
+    companyId: string,
+    userRole: string,
+    input: CreateInternshipInput
+  ) {
+    const slug =
+      input.title
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "") + `-${Date.now().toString(36)}`;
 
     const status = userRole === "ADMIN" ? "PUBLISHED" : "DRAFT";
 
@@ -152,17 +173,17 @@ export class InternshipService {
     }
 
     if (userRole !== "ADMIN" && existing.companyId !== userId) {
-      throw AppError.forbidden("Access denied: You may only modify postings created by your organization.");
+      throw AppError.forbidden(
+        "Access denied: You may only modify postings created by your organization."
+      );
     }
 
-    const data: any = { ...input };
-    if (input.stipend !== undefined) {
-      data.stipendAmount = input.stipend * 100;
-      delete data.stipend;
-    }
-    if (input.deadline) {
-      data.deadline = new Date(input.deadline);
-    }
+    const { stipend, deadline, ...rest } = input;
+    const data: Prisma.InternshipUncheckedUpdateInput = {
+      ...rest,
+      ...(stipend !== undefined ? { stipendAmount: stipend * 100 } : {}),
+      ...(deadline ? { deadline: new Date(deadline) } : {}),
+    };
 
     // Non-admins cannot self-approve to PUBLISHED
     if (userRole !== "ADMIN" && data.status === "PUBLISHED") {

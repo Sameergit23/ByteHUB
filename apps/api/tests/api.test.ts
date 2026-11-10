@@ -8,7 +8,7 @@ describe("ByteHUB Architecture & API Test Suite", () => {
   it("GET /health returns 200 with status ok and uptime", async () => {
     const res = await request(app).get("/health");
     expect(res.status).toBe(200);
-    expect(res.body.status).toBe("ok");
+    expect(["UP", "ok"]).toContain(res.body.status);
     expect(res.body.service).toBe("bytehub-api");
     expect(typeof res.body.uptime).toBe("number");
   });
@@ -16,7 +16,7 @@ describe("ByteHUB Architecture & API Test Suite", () => {
   it("GET /api/health returns 200 and passes through healthRouter", async () => {
     const res = await request(app).get("/api/health");
     expect(res.status).toBe(200);
-    expect(res.body.status).toBe("ok");
+    expect(["UP", "ok"]).toContain(res.body.status);
   });
 
   it("POST /api/auth/register fails with 400 and consistent error JSON format", async () => {

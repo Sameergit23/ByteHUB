@@ -1,13 +1,23 @@
 import { prisma } from "../lib/prisma.js";
 import { AppError } from "../utils/apiError.js";
 import { CompleteApplicationInput, ApplicationStatus } from "@bytehub/shared";
-import { storeResumeInVault, verifySignedResumeUrl } from "../utils/resumeStorage.js";
+import {
+  storeResumeInVault,
+  extractResumeKey,
+  resumeExists,
+  signResumeUrl,
+} from "../utils/resumeStorage.js";
+import { notificationService } from "./notification.service.js";
 
 export class ApplicationService {
   /**
    * Submit 4-step application with deadline check, duplicate guard, and confirmation
    */
-  async submitApplication(studentId: string, input: CompleteApplicationInput, ip?: string) {
+  async submitApplication(
+    studentId: string,
+    input: CompleteApplicationInput,
+    ip?: string
+  ) {
     // 1. Verify internship exists & is published
     const internship = await prisma.internship.findFirst({
       where: {
@@ -17,13 +27,17 @@ export class ApplicationService {
     });
 
     if (!internship || internship.status !== "PUBLISHED") {
-      throw AppError.badRequest("This internship posting is currently closed or unpublished.");
+      throw AppError.badRequest(
+        "This internship posting is currently closed or unpublished."
+      );
     }
 
     // 2. Server-side deadline check
     const now = new Date();
     if (now > new Date(internship.deadline)) {
-      throw AppError.badRequest("The submission deadline for this internship opening has passed.");
+      throw AppError.badRequest(
+        "The submission deadline for this internship opening has passed."
+      );
     }
 
     // 3. Duplicate application check
@@ -42,7 +56,16 @@ export class ApplicationService {
       );
     }
 
-    // 4. Create application and audit log inside transaction
+    // 4. The resume must be a file uploaded to our vault. Only its key is stored, so the
+    //    application never carries an expiring link or an arbitrary outside URL.
+    const resumeKey = extractResumeKey(input.resumeUrl);
+    if (!resumeKey || !(await resumeExists(resumeKey))) {
+      throw AppError.badRequest(
+        "Resume upload not found. Please upload your resume again (PDF or DOCX, max 5 MB)."
+      );
+    }
+
+    // 5. Create application and audit log inside transaction
     const application = await prisma.$transaction(async (tx) => {
       const created = await tx.application.create({
         data: {
@@ -57,7 +80,7 @@ export class ApplicationService {
           githubUrl: input.githubUrl,
           linkedinUrl: input.linkedinUrl,
           portfolioUrl: input.portfolioUrl || null,
-          resumeUrl: input.resumeUrl,
+          resumeUrl: resumeKey,
           bioSummary: input.bioSummary,
           whyInterested: input.whyInterested,
           relevantProjectDescription: input.relevantProjectDescription,
@@ -85,9 +108,17 @@ export class ApplicationService {
       return created;
     });
 
+    await notificationService.sendApplicationReceived({
+      studentName: application.fullName,
+      studentEmail: application.email,
+      roleTitle: internship.title,
+      companyName: internship.companyName,
+      applicationId: application.id,
+    });
+
     return {
       application,
-      confirmationMessage: `Your application for ${internship.title} at ${internship.companyName} has been received. A confirmation has been logged to your Student Dashboard.`,
+      confirmationMessage: `Your application for ${internship.title} at ${internship.companyName} has been received. A confirmation email is on its way and it is listed on your Student Dashboard.`,
     };
   }
 
@@ -105,7 +136,9 @@ export class ApplicationService {
     }
 
     if (application.studentId !== studentId) {
-      throw AppError.forbidden("Access denied: You can only withdraw your own applications.");
+      throw AppError.forbidden(
+        "Access denied: You can only withdraw your own applications."
+      );
     }
 
     if (application.status === "WITHDRAWN") {
@@ -187,25 +220,32 @@ export class ApplicationService {
     const isAdmin = userRole === "ADMIN";
 
     if (!isOwnerStudent && !isOfferingCompany && !isAdmin) {
-      await prisma.auditLog.create({
-        data: {
-          userId,
-          action: "SECURITY_RESUME_IDOR_BLOCKED",
-          entityType: "APPLICATION",
-          entityId: applicationId,
-          details: {
-            attemptedBy: userId,
-            studentOwner: application.studentId,
-            companyOwner: application.internship.companyId,
+      await prisma.auditLog
+        .create({
+          data: {
+            userId,
+            action: "SECURITY_RESUME_IDOR_BLOCKED",
+            entityType: "APPLICATION",
+            entityId: applicationId,
+            details: {
+              attemptedBy: userId,
+              studentOwner: application.studentId,
+              companyOwner: application.internship.companyId,
+            },
           },
-        },
-      }).catch(() => null);
+        })
+        .catch(() => null);
 
-      throw AppError.forbidden("Access denied: You are not authorized to inspect this candidate's resume.");
+      throw AppError.forbidden(
+        "Access denied: You are not authorized to inspect this candidate's resume."
+      );
     }
 
+    // Vault files get a fresh 15-minute signed link on every authorised request.
+    const resumeKey = extractResumeKey(application.resumeUrl);
+
     return {
-      resumeUrl: application.resumeUrl,
+      resumeUrl: resumeKey ? signResumeUrl(resumeKey) : application.resumeUrl,
       applicantName: application.fullName,
     };
   }
@@ -220,7 +260,11 @@ export class ApplicationService {
   /**
    * Company lists applications for their internship
    */
-  async getInternshipApplications(internshipId: string, userId: string, userRole: string) {
+  async getInternshipApplications(
+    internshipId: string,
+    userId: string,
+    userRole: string
+  ) {
     const internship = await prisma.internship.findUnique({
       where: { id: internshipId },
     });
@@ -230,7 +274,9 @@ export class ApplicationService {
     }
 
     if (userRole !== "ADMIN" && internship.companyId !== userId) {
-      throw AppError.forbidden("Access denied: You may only review candidates for your organization's postings.");
+      throw AppError.forbidden(
+        "Access denied: You may only review candidates for your organization's postings."
+      );
     }
 
     return prisma.application.findMany({
@@ -239,6 +285,41 @@ export class ApplicationService {
         deletedAt: null,
       },
       orderBy: { createdAt: "desc" },
+    });
+  }
+
+  /**
+   * Every application across all of a company's postings (newest first).
+   */
+  async getCompanyApplications(companyId: string) {
+    return prisma.application.findMany({
+      where: {
+        deletedAt: null,
+        internship: { companyId, deletedAt: null },
+      },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        phone: true,
+        collegeOrUniversity: true,
+        graduationYear: true,
+        degree: true,
+        githubUrl: true,
+        linkedinUrl: true,
+        portfolioUrl: true,
+        bioSummary: true,
+        whyInterested: true,
+        relevantProjectDescription: true,
+        availableHoursPerWeek: true,
+        earliestStartDate: true,
+        status: true,
+        feedbackNote: true,
+        createdAt: true,
+        internship: { select: { id: true, slug: true, title: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 200,
     });
   }
 
@@ -262,16 +343,49 @@ export class ApplicationService {
     }
 
     if (userRole !== "ADMIN" && application.internship.companyId !== userId) {
-      throw AppError.forbidden("Access denied: You cannot alter candidate states for another organization.");
+      throw AppError.forbidden(
+        "Access denied: You cannot alter candidate states for another organization."
+      );
     }
 
-    return prisma.application.update({
+    if (application.status === "WITHDRAWN") {
+      throw AppError.badRequest("This candidate has withdrawn their application.");
+    }
+    if (status === "WITHDRAWN") {
+      throw AppError.badRequest("Only the candidate can withdraw an application.");
+    }
+
+    const updated = await prisma.application.update({
       where: { id: applicationId },
       data: {
         status,
         feedbackNote: feedbackNote || null,
       },
     });
+
+    if (updated.status !== application.status) {
+      await prisma.auditLog
+        .create({
+          data: {
+            userId,
+            action: "APPLICATION_STATUS_CHANGED",
+            entityType: "APPLICATION",
+            entityId: applicationId,
+            details: { from: application.status, to: updated.status },
+          },
+        })
+        .catch(() => null);
+
+      await notificationService.sendApplicationStatusChanged({
+        studentName: application.fullName,
+        studentEmail: application.email,
+        roleTitle: application.internship.title,
+        companyName: application.internship.companyName,
+        newStatus: updated.status,
+      });
+    }
+
+    return updated;
   }
 }
 

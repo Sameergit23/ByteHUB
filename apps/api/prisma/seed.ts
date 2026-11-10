@@ -1,9 +1,41 @@
-import { PrismaClient, Role, InternshipType, InternshipStatus, ApplicationStatus, PaymentProvider, PaymentStatus, EnrollmentStatus } from "@prisma/client";
+/* eslint-disable no-console -- command-line script: console output is its interface */
+import dotenv from "dotenv";
+import path from "path";
+
+// Load environment variables from apps/api/.env or root .env
+dotenv.config({ path: path.resolve(__dirname, "../.env") });
+dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
+dotenv.config();
+
+import {
+  PrismaClient,
+  Prisma,
+  Role,
+  InternshipType,
+  InternshipStatus,
+  ApplicationStatus,
+  PaymentProvider,
+  PaymentStatus,
+  EnrollmentStatus,
+} from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
 async function main() {
+  // The seed creates accounts with a published password and sample listings that use real
+  // company names. It must never run against the live production database.
+  if (
+    process.env.NODE_ENV === "production" &&
+    process.env.ALLOW_DEMO_ACCOUNTS !== "true"
+  ) {
+    console.error(
+      "[ByteHUB Prisma Seed] Refusing to seed: NODE_ENV=production. " +
+        "Set ALLOW_DEMO_ACCOUNTS=true only for a staging database."
+    );
+    process.exit(1);
+  }
+
   console.log("[ByteHUB Prisma Seed] Starting database seeding...");
 
   // 1. Password hash for test accounts
@@ -17,7 +49,7 @@ async function main() {
     create: {
       email: "admin@bytehub.io",
       passwordHash,
-      name: "[ADMIN NAME]",
+      name: "ByteHUB Administrator",
       role: Role.ADMIN,
       isEmailVerified: true,
     },
@@ -31,7 +63,7 @@ async function main() {
     create: {
       email: "recruiting@hypergrid.io",
       passwordHash,
-      name: "[COMPANY REP]",
+      name: "Sarah Chen",
       role: Role.COMPANY,
       isEmailVerified: true,
       organizationName: "HyperGrid Systems",
@@ -40,7 +72,8 @@ async function main() {
           companyName: "HyperGrid Systems",
           website: "https://hypergrid.io",
           industry: "Distributed Systems & Cloud",
-          description: "High-performance partitioned key-value infrastructure with strict ACID guarantees.",
+          description:
+            "High-performance partitioned key-value infrastructure with strict ACID guarantees.",
           verified: true,
         },
       },
@@ -53,7 +86,7 @@ async function main() {
     create: {
       email: "talent@acme.com",
       passwordHash,
-      name: "[COMPANY REP]",
+      name: "Vikram Malhotra",
       role: Role.COMPANY,
       isEmailVerified: true,
       organizationName: "Acme Technology Labs",
@@ -62,7 +95,8 @@ async function main() {
           companyName: "Acme Technology Labs",
           website: "https://acme.com",
           industry: "Full-Stack Web & Mobile",
-          description: "Product studio building consumer and enterprise applications across platforms.",
+          description:
+            "Product studio building consumer and enterprise applications across platforms.",
           verified: true,
         },
       },
@@ -86,7 +120,8 @@ async function main() {
           college: "Indian Institute of Technology",
           graduationYear: 2026,
           degree: "B.Tech Computer Science & Engineering",
-          bioSummary: "Passionate full-stack developer experienced in TypeScript, React, Node.js, and PostgreSQL.",
+          bioSummary:
+            "Passionate full-stack developer experienced in TypeScript, React, Node.js, and PostgreSQL.",
           resumeUrl: "https://drive.google.com/file/d/sample-resume",
           githubUrl: "https://github.com/mayasen",
           linkedinUrl: "https://linkedin.com/in/mayasen",
@@ -125,7 +160,7 @@ async function main() {
     },
   ];
 
-  const createdTracks: Record<string, any> = {};
+  const createdTracks: Record<string, Prisma.TrackGetPayload<object>> = {};
   for (const t of tracksData) {
     const trk = await prisma.track.upsert({
       where: { slug: t.slug },
@@ -143,18 +178,38 @@ async function main() {
       trackSlug: "web-development",
       title: "Full-Stack Web Development",
       summary: "HTML to full-stack, built on real projects.",
-      description: "Master modern web engineering: Next.js App Router, strict TypeScript, Tailwind CSS, PostgreSQL, and transactional payment systems.",
+      description:
+        "Master modern web engineering: Next.js App Router, strict TypeScript, Tailwind CSS, PostgreSQL, and transactional payment systems.",
       syllabus: [
-        { week: 1, title: "Modern HTML & Semantic Layouts", description: "Semantic markup, WCAG accessibility, and responsive grids." },
-        { week: 2, title: "TypeScript & React Architecture", description: "Strict typing, component boundaries, and state management." },
-        { week: 3, title: "Next.js App Router & Server Components", description: "SSR, streaming, API route handlers, and caching." },
-        { week: 4, title: "Database Integration & Full Deployment", description: "PostgreSQL, Prisma, authentication, and cloud deployment." },
+        {
+          week: 1,
+          title: "Modern HTML & Semantic Layouts",
+          description: "Semantic markup, WCAG accessibility, and responsive grids.",
+        },
+        {
+          week: 2,
+          title: "TypeScript & React Architecture",
+          description: "Strict typing, component boundaries, and state management.",
+        },
+        {
+          week: 3,
+          title: "Next.js App Router & Server Components",
+          description: "SSR, streaming, API route handlers, and caching.",
+        },
+        {
+          week: 4,
+          title: "Database Integration & Full Deployment",
+          description: "PostgreSQL, Prisma, authentication, and cloud deployment.",
+        },
       ],
-      prerequisites: ["Basic computer literacy", "Commitment to 10-15 hours of weekly laboratory work"],
+      prerequisites: [
+        "Basic computer literacy",
+        "Commitment to 10-15 hours of weekly laboratory work",
+      ],
       cohort: {
         cohortCode: "WEB-2026-COHORT-01",
         name: "Cohort 01 — Full-Stack Web",
-        mode: "[REMOTE / ON-SITE]",
+        mode: "Remote (Live Cohort)",
         startDate: new Date("2026-12-01T00:00:00.000Z"),
         endDate: new Date("2027-02-28T00:00:00.000Z"),
         durationWeeks: 12,
@@ -169,17 +224,30 @@ async function main() {
       trackSlug: "app-development",
       title: "Mobile App Development",
       summary: "Ship a mobile app from idea to store.",
-      description: "Build cross-platform applications with React Native, local persistence, native sensors, and store packaging.",
+      description:
+        "Build cross-platform applications with React Native, local persistence, native sensors, and store packaging.",
       syllabus: [
-        { week: 1, title: "Mobile UI Layout & Flexbox", description: "Native components, gestures, and responsive view layouts." },
-        { week: 2, title: "Navigation & Device Sensors", description: "Stack navigators, camera, location, and storage." },
-        { week: 3, title: "App Store Packaging & Release", description: "Build variants, code signing, and beta testing distribution." },
+        {
+          week: 1,
+          title: "Mobile UI Layout & Flexbox",
+          description: "Native components, gestures, and responsive view layouts.",
+        },
+        {
+          week: 2,
+          title: "Navigation & Device Sensors",
+          description: "Stack navigators, camera, location, and storage.",
+        },
+        {
+          week: 3,
+          title: "App Store Packaging & Release",
+          description: "Build variants, code signing, and beta testing distribution.",
+        },
       ],
       prerequisites: ["Familiarity with JavaScript or TypeScript fundamentals"],
       cohort: {
         cohortCode: "APP-2026-COHORT-01",
         name: "Cohort 01 — Mobile Apps",
-        mode: "[REMOTE / ON-SITE]",
+        mode: "Remote (Live Cohort)",
         startDate: new Date("2026-12-01T00:00:00.000Z"),
         endDate: new Date("2027-02-28T00:00:00.000Z"),
         durationWeeks: 12,
@@ -194,17 +262,30 @@ async function main() {
       trackSlug: "data-and-ai",
       title: "Data Analytics with Python",
       summary: "Python, analytics and applied machine learning.",
-      description: "Clean, transform, and visualize large datasets using Python, pandas, SQL, and interactive dashboards.",
+      description:
+        "Clean, transform, and visualize large datasets using Python, pandas, SQL, and interactive dashboards.",
       syllabus: [
-        { week: 1, title: "Python Fundamentals & Data Structures", description: "Data structures, lambdas, and vectorized operations." },
-        { week: 2, title: "SQL & Relational Aggregations", description: "Window functions, CTEs, and execution plan optimization." },
-        { week: 3, title: "Exploratory Data Analysis", description: "Visualizing correlations, distributions, and summary statistics." },
+        {
+          week: 1,
+          title: "Python Fundamentals & Data Structures",
+          description: "Data structures, lambdas, and vectorized operations.",
+        },
+        {
+          week: 2,
+          title: "SQL & Relational Aggregations",
+          description: "Window functions, CTEs, and execution plan optimization.",
+        },
+        {
+          week: 3,
+          title: "Exploratory Data Analysis",
+          description: "Visualizing correlations, distributions, and summary statistics.",
+        },
       ],
       prerequisites: ["Basic algebra and high-school mathematics"],
       cohort: {
         cohortCode: "DATA-2026-COHORT-01",
         name: "Cohort 01 — Data Analytics",
-        mode: "[REMOTE / ON-SITE]",
+        mode: "Remote (Live Cohort)",
         startDate: new Date("2026-12-01T00:00:00.000Z"),
         endDate: new Date("2027-02-01T00:00:00.000Z"),
         durationWeeks: 8,
@@ -219,17 +300,30 @@ async function main() {
       trackSlug: "data-and-ai",
       title: "Applied Machine Learning",
       summary: "Applied machine learning workflows and production models.",
-      description: "Train, evaluate, and serve predictive models using scikit-learn, PyTorch, and containerized REST endpoints.",
+      description:
+        "Train, evaluate, and serve predictive models using scikit-learn, PyTorch, and containerized REST endpoints.",
       syllabus: [
-        { week: 1, title: "Supervised Learning Fundamentals", description: "Regression, classification, and validation splits." },
-        { week: 2, title: "Neural Networks & Feature Engineering", description: "Deep representations, embeddings, and loss surfaces." },
-        { week: 3, title: "Model Serving & Monitoring", description: "FastAPI endpoints, latency profiling, and drift monitoring." },
+        {
+          week: 1,
+          title: "Supervised Learning Fundamentals",
+          description: "Regression, classification, and validation splits.",
+        },
+        {
+          week: 2,
+          title: "Neural Networks & Feature Engineering",
+          description: "Deep representations, embeddings, and loss surfaces.",
+        },
+        {
+          week: 3,
+          title: "Model Serving & Monitoring",
+          description: "FastAPI endpoints, latency profiling, and drift monitoring.",
+        },
       ],
       prerequisites: ["Working knowledge of Python and linear algebra"],
       cohort: {
         cohortCode: "ML-2026-COHORT-01",
         name: "Cohort 01 — Applied ML",
-        mode: "[REMOTE / ON-SITE]",
+        mode: "Remote (Live Cohort)",
         startDate: new Date("2026-12-15T00:00:00.000Z"),
         endDate: new Date("2027-03-15T00:00:00.000Z"),
         durationWeeks: 12,
@@ -244,17 +338,30 @@ async function main() {
       trackSlug: "ui-ux-design",
       title: "UI/UX Design",
       summary: "Research, wireframes and polished interfaces.",
-      description: "From user research to design systems: Figma components, wireframing, high-fidelity prototypes, and usability testing.",
+      description:
+        "From user research to design systems: Figma components, wireframing, high-fidelity prototypes, and usability testing.",
       syllabus: [
-        { week: 1, title: "Design Systems & Token Architecture", description: "Color contrast, typography scales, and auto-layout." },
-        { week: 2, title: "User Flows & Interactive Prototyping", description: "Figma variables, component states, and micro-interactions." },
-        { week: 3, title: "Usability Testing & Design Handoff", description: "User interviews, test analysis, and developer documentation." },
+        {
+          week: 1,
+          title: "Design Systems & Token Architecture",
+          description: "Color contrast, typography scales, and auto-layout.",
+        },
+        {
+          week: 2,
+          title: "User Flows & Interactive Prototyping",
+          description: "Figma variables, component states, and micro-interactions.",
+        },
+        {
+          week: 3,
+          title: "Usability Testing & Design Handoff",
+          description: "User interviews, test analysis, and developer documentation.",
+        },
       ],
       prerequisites: ["No coding required; laptop with modern browser"],
       cohort: {
         cohortCode: "DES-2026-COHORT-01",
         name: "Cohort 01 — UI/UX Design",
-        mode: "[REMOTE / ON-SITE]",
+        mode: "Remote (Live Cohort)",
         startDate: new Date("2026-12-01T00:00:00.000Z"),
         endDate: new Date("2027-02-01T00:00:00.000Z"),
         durationWeeks: 8,
@@ -269,17 +376,30 @@ async function main() {
       trackSlug: "web-development",
       title: "Backend with Node.js",
       summary: "Scalable APIs, authentication, and database transactions.",
-      description: "Build robust backend microservices with Express, PostgreSQL, Prisma, Redis caching, and dual payment webhooks.",
+      description:
+        "Build robust backend microservices with Express, PostgreSQL, Prisma, Redis caching, and dual payment webhooks.",
       syllabus: [
-        { week: 1, title: "HTTP Architecture & Express", description: "Layered routing, middleware pipelines, and structured logging." },
-        { week: 2, title: "PostgreSQL & ACID Transactions", description: "Prisma schema design, indexes, and concurrency isolation." },
-        { week: 3, title: "Payment Gateways & Idempotency", description: "Stripe and Razorpay webhooks with cryptographic verification." },
+        {
+          week: 1,
+          title: "HTTP Architecture & Express",
+          description: "Layered routing, middleware pipelines, and structured logging.",
+        },
+        {
+          week: 2,
+          title: "PostgreSQL & ACID Transactions",
+          description: "Prisma schema design, indexes, and concurrency isolation.",
+        },
+        {
+          week: 3,
+          title: "Payment Gateways & Idempotency",
+          description: "Stripe and Razorpay webhooks with cryptographic verification.",
+        },
       ],
       prerequisites: ["Basic knowledge of JavaScript or TypeScript"],
       cohort: {
         cohortCode: "NODE-2026-COHORT-01",
         name: "Cohort 01 — Backend Node",
-        mode: "[REMOTE / ON-SITE]",
+        mode: "Remote (Live Cohort)",
         startDate: new Date("2026-12-01T00:00:00.000Z"),
         endDate: new Date("2027-02-28T00:00:00.000Z"),
         durationWeeks: 10,
@@ -291,7 +411,7 @@ async function main() {
     },
   ];
 
-  let sampleCohortForEnrollment: any = null;
+  let sampleCohortForEnrollment: Prisma.CohortGetPayload<object> | null = null;
 
   for (const p of programmesData) {
     const track = createdTracks[p.trackSlug];
@@ -331,14 +451,15 @@ async function main() {
       slug: "frontend-developer-intern",
       trackSlug: "web-development",
       companyId: companyUser1.id,
-      companyName: "[COMPANY NAME]",
+      companyName: "Razorpay",
       title: "Frontend Developer Intern",
-      location: "[LOCATION]",
+      location: "Bangalore, India",
       type: InternshipType.REMOTE,
       stipendAmount: 3500000, // 35,000 INR in paise
       currency: "INR",
       durationMonths: 6,
-      description: "[Two or three lines describing the project and team.]",
+      description:
+        "Join our merchant experience engineering team to craft accessible, high-performance UI components using Next.js and TypeScript.",
       whatYouWillDo: [
         "Build interface components from designs",
         "Fix bugs and review code with a mentor",
@@ -346,7 +467,7 @@ async function main() {
       ],
       requirements: [
         "Basic HTML, CSS and JavaScript",
-        "[Any programme prerequisite]",
+        "Completed ByteHUB Web Development Track or equivalent React portfolio",
       ],
       skills: ["React", "TypeScript", "Tailwind CSS"],
       openings: 2,
@@ -357,14 +478,15 @@ async function main() {
       slug: "mobile-app-intern",
       trackSlug: "app-development",
       companyId: companyUser2.id,
-      companyName: "[COMPANY NAME]",
+      companyName: "CRED",
       title: "Mobile App Intern",
-      location: "[LOCATION]",
+      location: "Bangalore / Remote",
       type: InternshipType.REMOTE,
-      stipendAmount: 3500000,
+      stipendAmount: 4000000,
       currency: "INR",
       durationMonths: 6,
-      description: "[Two or three lines describing the project and team.]",
+      description:
+        "Build fluid mobile micro-interactions and smooth transaction flows in React Native, mentored by senior mobile architects.",
       whatYouWillDo: [
         "Implement responsive screen layouts using React Native components",
         "Integrate client-side local cache with asynchronous backend endpoints",
@@ -383,14 +505,15 @@ async function main() {
       slug: "data-analyst-intern",
       trackSlug: "data-and-ai",
       companyId: companyUser1.id,
-      companyName: "[COMPANY NAME]",
+      companyName: "Swiggy",
       title: "Data Analyst Intern",
-      location: "[LOCATION]",
+      location: "Hyderabad, India",
       type: InternshipType.HYBRID,
-      stipendAmount: 3500000,
+      stipendAmount: 3000000,
       currency: "INR",
       durationMonths: 6,
-      description: "[Two or three lines describing the project and team.]",
+      description:
+        "Work alongside our operations analytics team to clean, model, and visualize real-time delivery logistics.",
       whatYouWillDo: [
         "Clean, transform, and aggregate operational event logs",
         "Build visual dashboards and KPI reports",
@@ -409,14 +532,15 @@ async function main() {
       slug: "ui-ux-design-intern",
       trackSlug: "ui-ux-design",
       companyId: companyUser2.id,
-      companyName: "[COMPANY NAME]",
+      companyName: "Postman",
       title: "UI/UX Design Intern",
-      location: "[LOCATION]",
+      location: "Bangalore / Remote",
       type: InternshipType.REMOTE,
-      stipendAmount: 3000000,
+      stipendAmount: 3200000,
       currency: "INR",
       durationMonths: 3,
-      description: "[Two or three lines describing the project and team.]",
+      description:
+        "Design modular developer tooling interfaces, conduct usability sessions with engineering teams, and document scalable design system tokens.",
       whatYouWillDo: [
         "Create low-fidelity wireframes and user flow diagrams",
         "Design high-fidelity UI components following design tokens",
@@ -435,14 +559,15 @@ async function main() {
       slug: "backend-developer-intern",
       trackSlug: "web-development",
       companyId: companyUser1.id,
-      companyName: "[COMPANY NAME]",
+      companyName: "Zerodha",
       title: "Backend Developer Intern",
-      location: "[LOCATION]",
+      location: "Bangalore, India",
       type: InternshipType.REMOTE,
-      stipendAmount: 4000000,
+      stipendAmount: 4500000,
       currency: "INR",
       durationMonths: 6,
-      description: "[Two or three lines describing the project and team.]",
+      description:
+        "Contribute to core backend APIs, build deterministic data processing pipelines, and optimize PostgreSQL query performance.",
       whatYouWillDo: [
         "Design and document RESTful endpoints using OpenAPI / Zod",
         "Write unit and integration tests using Vitest or Jest",
@@ -459,7 +584,7 @@ async function main() {
     },
   ];
 
-  let sampleInternshipForApp: any = null;
+  let sampleInternshipForApp: Prisma.InternshipGetPayload<object> | null = null;
 
   for (const item of internshipsData) {
     const track = createdTracks[item.trackSlug];
@@ -516,9 +641,12 @@ async function main() {
         linkedinUrl: "https://linkedin.com/in/mayasen",
         portfolioUrl: "https://mayasen.dev",
         resumeUrl: "https://drive.google.com/file/d/sample-resume",
-        bioSummary: "Passionate full-stack developer experienced in TypeScript, React, Node.js, and PostgreSQL.",
-        whyInterested: "ByteHUB's platform engineering programme aligns with my ambition to ship production distributed systems with strict ACID guarantees.",
-        relevantProjectDescription: "Engineered an event-driven queue with write-ahead logging and PostgreSQL transactional isolation.",
+        bioSummary:
+          "Passionate full-stack developer experienced in TypeScript, React, Node.js, and PostgreSQL.",
+        whyInterested:
+          "ByteHUB's platform engineering programme aligns with my ambition to ship production distributed systems with strict ACID guarantees.",
+        relevantProjectDescription:
+          "Engineered an event-driven queue with write-ahead logging and PostgreSQL transactional isolation.",
         availableHoursPerWeek: 30,
         earliestStartDate: new Date("2026-12-01T00:00:00.000Z"),
         status: ApplicationStatus.SUBMITTED,
@@ -570,10 +698,11 @@ async function main() {
   // 10. Sample Contact Message & Audit Log
   await prisma.contactMessage.create({
     data: {
-      fullName: "[SAMPLE INQUIRER]",
+      fullName: "Rahul Verma",
       email: "inquiry@techcorp.com",
       topic: "Employer Partnerships",
-      message: "We are interested in hiring 4 backend engineering interns from the upcoming December cohort.",
+      message:
+        "We are interested in hiring 4 backend engineering interns from the upcoming December cohort.",
       isRead: false,
     },
   });

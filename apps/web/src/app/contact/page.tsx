@@ -8,6 +8,8 @@ import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
 import { Textarea } from "../../components/ui/Textarea";
 import { ColophonFooter } from "../../components/layout/ColophonFooter";
+import { apiFetch, ApiError } from "../../lib/api";
+import { siteConfig } from "../../lib/siteConfig";
 
 // Zod validation contract for Contact form
 const contactSchema = z.object({
@@ -34,7 +36,9 @@ export default function ContactPage() {
     _hp: "",
   });
 
-  const [errors, setErrors] = useState<Partial<Record<keyof ContactFormData, string>>>({});
+  const [errors, setErrors] = useState<Partial<Record<keyof ContactFormData, string>>>(
+    {}
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [lastSubmittedAt, setLastSubmittedAt] = useState<number | null>(null);
   const [statusMessage, setStatusMessage] = useState<{
@@ -82,17 +86,16 @@ export default function ContactPage() {
     setIsSubmitting(true);
 
     try {
-      // POST to backend API with simulated fallback
-      await fetch("/api/contact", {
+      // The message is only reported as sent once the server has stored it.
+      await apiFetch("/contact", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           fullName: formData.fullName,
           email: formData.email,
           topic: formData.topic,
           message: formData.message,
         }),
-      }).catch(() => null);
+      });
 
       setLastSubmittedAt(Date.now());
       setStatusMessage({
@@ -106,11 +109,21 @@ export default function ContactPage() {
         message: "",
         _hp: "",
       });
-    } catch {
-      setStatusMessage({
-        type: "error",
-        text: "An error occurred while transmitting your message. Please try again or email us directly.",
-      });
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 429) {
+        setStatusMessage({
+          type: "rate_limit",
+          text: "Too many messages sent from this connection. Please wait 15 minutes before trying again.",
+        });
+      } else {
+        setStatusMessage({
+          type: "error",
+          text:
+            err instanceof ApiError && err.status === 400
+              ? err.message
+              : "Your message could not be sent. Please try again or email us directly.",
+        });
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -128,7 +141,8 @@ export default function ContactPage() {
             Contact our team
           </h1>
           <p className="font-sans text-sm sm:text-base text-editorial-muted max-w-2xl leading-relaxed">
-            Have a question about upcoming cohorts, syllabus prerequisites, or hiring trained interns? Drop us a line below.
+            Have a question about upcoming cohorts, syllabus prerequisites, or hiring
+            trained interns? Drop us a line below.
           </p>
         </div>
 
@@ -145,9 +159,7 @@ export default function ContactPage() {
                   <div className="font-heading font-bold text-lg text-ink">
                     Message Dispatched
                   </div>
-                  <p className="text-sm text-editorial-muted">
-                    {statusMessage.text}
-                  </p>
+                  <p className="text-sm text-editorial-muted">{statusMessage.text}</p>
                   <button
                     type="button"
                     onClick={() => setStatusMessage(null)}
@@ -174,9 +186,7 @@ export default function ContactPage() {
                     tabIndex={-1}
                     autoComplete="off"
                     value={formData._hp}
-                    onChange={(e) =>
-                      setFormData({ ...formData, _hp: e.target.value })
-                    }
+                    onChange={(e) => setFormData({ ...formData, _hp: e.target.value })}
                     className="sr-only"
                     aria-hidden="true"
                   />
@@ -199,9 +209,7 @@ export default function ContactPage() {
                     placeholder="saim@example.com"
                     value={formData.email}
                     error={errors.email}
-                    onChange={(e) =>
-                      setFormData({ ...formData, email: e.target.value })
-                    }
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   />
 
                   <Select
@@ -272,7 +280,7 @@ export default function ContactPage() {
                     Student Admissions
                   </div>
                   <div className="font-mono text-xs text-editorial-muted">
-                    admissions@bytehub.io
+                    {siteConfig.contact.admissionsEmail}
                   </div>
                 </div>
 
@@ -281,16 +289,14 @@ export default function ContactPage() {
                     Company Partnerships
                   </div>
                   <div className="font-mono text-xs text-editorial-muted">
-                    partners@bytehub.io
+                    {siteConfig.contact.partnershipsEmail}
                   </div>
                 </div>
 
                 <div className="py-3 space-y-1">
-                  <div className="font-heading font-bold text-ink">
-                    General Inquiries
-                  </div>
+                  <div className="font-heading font-bold text-ink">General Inquiries</div>
                   <div className="font-mono text-xs text-editorial-muted">
-                    hello@bytehub.io
+                    {siteConfig.contact.generalEmail}
                   </div>
                 </div>
               </div>
@@ -303,16 +309,19 @@ export default function ContactPage() {
               <div className="space-y-3 font-sans text-sm">
                 <div>
                   <div className="font-heading font-bold text-ink">
-                    Bengaluru Campus
+                    {siteConfig.contact.officeName}
                   </div>
                   <p className="text-editorial-muted text-xs leading-relaxed">
-                    ByteHUB Learning Labs, Indiranagar, Bengaluru, Karnataka 560038, India
+                    {siteConfig.contact.officeAddress}
+                  </p>
+                  <p className="text-editorial-muted text-xs leading-relaxed pt-1">
+                    Phone: {siteConfig.contact.phone}
                   </p>
                 </div>
 
                 <div className="pt-2 border-t border-editorial-line">
                   <span className="font-mono text-xs text-editorial-muted">
-                    Hours: Monday – Friday, 09:00 – 18:00 IST
+                    Hours: {siteConfig.contact.hours}
                   </span>
                 </div>
               </div>
