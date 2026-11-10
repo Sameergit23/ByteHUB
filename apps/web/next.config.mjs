@@ -1,4 +1,8 @@
-/** @type {import('next').NextConfig} */
+import { fileURLToPath } from "node:url";
+
+// Monorepo root: the standalone build then keeps the repo layout (apps/web/server.js), which
+// the Dockerfile's start command expects, and includes packages/shared.
+const monorepoRoot = fileURLToPath(new URL("../../", import.meta.url));
 
 const isProduction = process.env.NODE_ENV === "production";
 
@@ -59,6 +63,12 @@ const securityHeaders = [
 const nextConfig = {
   reactStrictMode: true,
   output: process.env.BUILD_STANDALONE ? "standalone" : undefined,
+  outputFileTracingRoot: monorepoRoot,
+  experimental: {
+    // How long the "/api" proxy waits for the API. Next's default is 30s, but an API on a
+    // free host that sleeps when idle (e.g. Render's free plan) takes about 50s to wake up.
+    proxyTimeout: 90_000,
+  },
   transpilePackages: ["@bytehub/shared"],
   images: {
     remotePatterns: [

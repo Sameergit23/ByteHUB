@@ -38,9 +38,9 @@ hosting has no permanent disk.
 
 - [ ] GitHub: make `master` the default branch (Settings → General) and delete the starter `main` branch
 - [ ] Render: check **Billing** for free-hour usage; suspend services you no longer need
-- [ ] Render: create the API service — Docker, branch `master`, region **Singapore**, plan **Free**,
-      no disk, health check `/api/health`, environment variables from `.env.production.example`
-      including `STORAGE_DRIVER=supabase`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
+- [x] Render: create the API service — live at `https://bytehub-api.onrender.com` (health: UP,
+      database healthy). Docker, branch `master`, region **Singapore**, plan **Free**, no disk,
+      health check `/api/health`, `STORAGE_DRIVER=supabase` with the Supabase storage keys
 - [ ] Render: create the website service — Dockerfile `apps/web/Dockerfile`, region Singapore, plan Free,
       `API_INTERNAL_URL` = the API's public address + `/api` (free services can't use Render's
       private network), `NEXT_PUBLIC_SITE_URL=https://bytehubnet.com`

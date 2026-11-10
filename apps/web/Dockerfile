@@ -10,6 +10,8 @@ FROM node:20-alpine AS base
 RUN apk add --no-cache libc6-compat dumb-init
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@9.12.3 --activate
+# Git hooks are never needed inside an image.
+ENV HUSKY=0
 
 # ------------------------------------------------------------------------------
 # Stage 2: Dependencies
@@ -43,6 +45,11 @@ ENV NODE_ENV=production
 # uses to reach the API (e.g. --build-arg API_INTERNAL_URL=http://api:5000/api).
 ARG API_INTERNAL_URL=http://api:5000/api
 ENV API_INTERNAL_URL=${API_INTERNAL_URL}
+
+# Public site address, written into the sitemap, robots.txt and page links at build time.
+# (Render passes a service's environment variables to the Docker build as build args.)
+ARG NEXT_PUBLIC_SITE_URL=https://bytehubnet.com
+ENV NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL}
 
 # The runner stage copies .next/standalone, which next.config.mjs only emits with this flag.
 ENV BUILD_STANDALONE=1

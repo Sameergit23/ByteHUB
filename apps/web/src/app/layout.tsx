@@ -3,6 +3,7 @@ import { Space_Grotesk, Inter } from "next/font/google";
 import "./globals.css";
 import { Header } from "../components/layout/Header";
 import { Footer } from "../components/layout/Footer";
+import { siteConfig } from "../lib/siteConfig";
 
 const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
@@ -19,6 +20,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
+  // Base for absolute links in page metadata (e.g. social-share images).
+  metadataBase: new URL(siteConfig.siteUrl),
   title: "ByteHUB — Real projects. Real mentors. Your first step into tech.",
   description:
     "Learn a skill in a guided training programme, then prove it on a live internship project with verified stipends and ACID transactions.",
