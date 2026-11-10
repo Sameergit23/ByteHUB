@@ -7,7 +7,10 @@
 # Stage 1: Base image with corepack and pnpm
 # ------------------------------------------------------------------------------
 FROM node:20-alpine AS base
-RUN apk add --no-cache libc6-compat dumb-init
+# openssl: Prisma checks for it while installing and generating, to choose the right database
+# engine. Recent Alpine images no longer include it, and without it Prisma picks an engine
+# that needs libssl.so.1.1, which then fails to load at runtime.
+RUN apk add --no-cache libc6-compat dumb-init openssl
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@9.12.3 --activate
 # Git hooks are never needed inside an image.
@@ -57,8 +60,9 @@ RUN pnpm --filter @bytehub/api build
 FROM node:20-alpine AS runner
 WORKDIR /app
 
-# Install dumb-init for clean process reaping and signal handling
-RUN apk add --no-cache dumb-init wget
+# dumb-init for clean process reaping and signal handling; openssl for Prisma's database
+# engine (it is detected again at runtime, so the runner needs it too)
+RUN apk add --no-cache dumb-init wget openssl
 
 # Set environment
 ENV NODE_ENV=production
