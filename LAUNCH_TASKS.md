@@ -1,6 +1,6 @@
 # ByteHUB — Launch Tasks
 
-Last updated: 10 November 2026. Budget for hosting right now: **₹0**.
+Last updated: 11 November 2026. Budget for hosting right now: **₹0**.
 
 ## Done
 
@@ -41,16 +41,24 @@ hosting has no permanent disk.
 - [x] Render: create the API service — live at `https://bytehub-api.onrender.com` (health: UP,
       database healthy). Docker, branch `master`, region **Singapore**, plan **Free**, no disk,
       health check `/api/health`, `STORAGE_DRIVER=supabase` with the Supabase storage keys
-- [ ] Render: create the website service — Dockerfile `apps/web/Dockerfile`, region Singapore, plan Free,
-      `API_INTERNAL_URL` = the API's public address + `/api` (free services can't use Render's
-      private network), `NEXT_PUBLIC_SITE_URL=https://bytehubnet.com`
-- [ ] Render + Wix DNS: connect `bytehubnet.com` and `www.bytehubnet.com` (HTTPS is automatic)
+- [x] Render: create the website service — `bytehub-web`, Dockerfile `apps/web/Dockerfile`, region
+      Singapore, plan Free, `API_INTERNAL_URL=https://bytehub-api.onrender.com/api`,
+      `NEXT_PUBLIC_SITE_URL=https://bytehubnet.com`
+- [x] Render + Wix DNS: `bytehubnet.com` live on Render with HTTPS (Wix: domain unassigned from the
+      Wix site, A `216.24.57.1`, CNAME `www` → `bytehub-web.onrender.com`)
+- [ ] `www.bytehubnet.com`: certificate issued in Render, but Cloudflare still routes it to Wix
+      (shows a Wix error page). If it doesn't clear on its own, ask Wix support to remove
+      `www.bytehubnet.com` from Wix's hosting / Cloudflare custom hostnames
 - [ ] Local: switch `apps/api/.env` to Cashfree **sandbox** keys (it still has live keys)
 
 ## Pending — testing (Phase 7, on the live site, sandbox payments)
 
-- [ ] Sign up → verification email arrives in a real inbox (not spam)
-- [ ] Make yourself admin (Supabase SQL: `update "User" set role = 'ADMIN' where email = '...'`)
+- [x] Sign up → verification email arrives and the link verifies the account (11 Nov 2026)
+- [x] Make yourself admin (Supabase SQL: `update "User" set role = 'ADMIN' where email = '...'`)
+- [x] Supabase: run the database fix (migration `20261111000000_sync_enrollment_payment_status`),
+      then restart the API on Render. The production database was missing enrolment columns and
+      payment/enrolment status values, which broke the admin panel and would break payments
+- [x] Admin panel loads with no error (after the database fix)
 - [ ] Company posts an internship → admin approves → student applies with resume → company opens resume
 - [ ] Sandbox payment → seat confirmed, receipt email, appears in dashboard
 - [ ] Forgot password, contact form, refund from admin panel
