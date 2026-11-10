@@ -14,16 +14,16 @@ export const siteConfig = {
 
   contact: {
     // PLACEHOLDER — use mailboxes on your real domain.
-    generalEmail: "hello@bytehub.io",
-    admissionsEmail: "admissions@bytehub.io",
-    partnershipsEmail: "partners@bytehub.io",
-    supportEmail: "support@bytehub.io",
+    generalEmail: "support@bytehubnet.com",
+    admissionsEmail: "support@bytehubnet.com",
+    partnershipsEmail: "support@bytehubnet.com",
+    supportEmail: "support@bytehubnet.com",
     // PLACEHOLDER — a number you actually answer. Shown in footers.
-    phone: "[Support phone number]",
+    phone: "7366937682",
     // PLACEHOLDER
-    city: "Bengaluru, India",
+    city: "Indore, India",
     officeName: "ByteHUB Learning Labs",
-    officeAddress: "[Office address], Bengaluru, Karnataka [PIN], India",
+    officeAddress: "Vijay Nagar, Indore, Madhyapradesh 452020, India",
     hours: "Monday – Friday, 09:00 – 18:00 IST",
   },
 
@@ -31,19 +31,19 @@ export const siteConfig = {
     /** Set to true once a lawyer has reviewed the Terms, Privacy and Refund pages. */
     reviewed: false,
     // PLACEHOLDER — the registered business that receives payments.
-    legalEntityName: "[Registered legal entity name]",
-    registeredAddress: "[Registered office address, City, State, PIN, India]",
+    legalEntityName: "Sameer Akhtar",
+    registeredAddress: "Vijay Nagar, Indore, Madhyapradesh 452020, India",
     // PLACEHOLDER — date the current version of the policies takes effect.
     effectiveDate: "[Effective date]",
     /** Courts for disputes (Terms, "Governing law"). */
-    jurisdictionCity: "Bengaluru, Karnataka",
+    jurisdictionCity: "Indore, Madhyapradesh",
     /**
      * Grievance Officer — required under India's IT Rules 2011 and the DPDP Act 2023.
      * PLACEHOLDER
      */
     grievanceOfficer: {
-      name: "[Grievance Officer name]",
-      email: "grievance@bytehub.io",
+      name: "",
+      email: "",
     },
     /** Optional: shown on the Terms page and invoices when you are GST registered. */
     gstin: "",
