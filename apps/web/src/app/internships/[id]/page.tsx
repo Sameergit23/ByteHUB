@@ -11,9 +11,9 @@ import { getInternship } from "../../../lib/catalog";
 export async function generateMetadata({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }): Promise<Metadata> {
-  const internship = await getInternship(params.id).catch(() => null);
+  const internship = await getInternship((await params).id).catch(() => null);
 
   if (!internship) {
     return { title: "Internship Not Found — ByteHUB" };
@@ -35,9 +35,9 @@ export async function generateMetadata({
 export default async function InternshipDetailPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
-  const internship = await getInternship(params.id);
+  const internship = await getInternship((await params).id);
 
   if (!internship) {
     return notFound();

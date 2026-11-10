@@ -25,7 +25,7 @@ type StepValidation =
   | { success: true }
   | {
       success: false;
-      error: { issues: { path: (string | number)[]; message: string }[] };
+      error: { issues: { path: PropertyKey[]; message: string }[] };
     };
 import {
   ApplicationDetailsSchema,

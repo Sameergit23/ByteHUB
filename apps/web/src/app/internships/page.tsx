@@ -18,16 +18,17 @@ export const metadata: Metadata = {
 };
 
 export default async function InternshipsPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams?: {
+  searchParams: Promise<{
     search?: string;
     track?: string;
     mode?: string;
     duration?: string;
     page?: string;
-  };
+  }>;
 }) {
+  const searchParams = await searchParamsPromise;
   const search = searchParams?.search?.toLowerCase() || "";
   const track = searchParams?.track || "ALL";
   const mode = searchParams?.mode || "ANY";

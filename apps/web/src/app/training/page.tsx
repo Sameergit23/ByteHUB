@@ -17,11 +17,12 @@ export const metadata: Metadata = {
 export default async function TrainingPage({
   searchParams,
 }: {
-  searchParams?: {
+  searchParams: Promise<{
     track?: string;
-  };
+  }>;
 }) {
-  const selectedTrack = searchParams?.track || "all";
+  const { track } = await searchParams;
+  const selectedTrack = track || "all";
 
   const programmes = await getProgrammes();
   const isUnavailable = programmes === null;

@@ -14,7 +14,11 @@ export type ApplicationDetailsInput = z.infer<typeof ApplicationDetailsSchema>;
 
 // Step 2: Education & Experience
 export const ApplicationEducationSchema = z.object({
-  collegeOrUniversity: z.string().trim().min(2, "College/University name required").max(150),
+  collegeOrUniversity: z
+    .string()
+    .trim()
+    .min(2, "College/University name required")
+    .max(150),
   graduationYear: z.coerce
     .number()
     .int()
@@ -37,7 +41,10 @@ export type ApplicationEducationInput = z.infer<typeof ApplicationEducationSchem
 
 // Step 3: Resume & Statement
 export const ApplicationResumeSchema = z.object({
-  resumeUrl: z.string().trim().min(1, "Resume file must be uploaded (PDF or DOCX, max 5 MB)"),
+  resumeUrl: z
+    .string()
+    .trim()
+    .min(1, "Resume file must be uploaded (PDF or DOCX, max 5 MB)"),
   bioSummary: z
     .string()
     .trim()
@@ -59,23 +66,26 @@ export type ApplicationResumeInput = z.infer<typeof ApplicationResumeSchema>;
 // Step 4: Availability, Terms & Review
 export const ApplicationReviewSchema = z.object({
   availableHoursPerWeek: z.coerce.number().int().min(10).max(60),
-  earliestStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Format YYYY-MM-DD required"),
+  earliestStartDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Format YYYY-MM-DD required"),
   termsAccepted: z.literal(true, {
-    errorMap: () => ({ message: "You must accept ByteHUB terms & code of conduct" }),
+    error: "You must accept ByteHUB terms & code of conduct",
   }),
   accurateInformationAcknowledged: z.literal(true, {
-    errorMap: () => ({ message: "You must verify that all details provided are accurate" }),
+    error: "You must verify that all details provided are accurate",
   }),
 });
 export type ApplicationReviewInput = z.infer<typeof ApplicationReviewSchema>;
 
-// Complete Unified Application Schema
-export const CompleteApplicationSchema = ApplicationDetailsSchema.merge(ApplicationEducationSchema)
-  .merge(ApplicationResumeSchema)
-  .merge(ApplicationReviewSchema)
-  .extend({
-    internshipId: z.string().min(1, "Internship identifier is required"),
-  });
+// Complete Unified Application Schema (all four steps plus the internship being applied to)
+export const CompleteApplicationSchema = z.object({
+  ...ApplicationDetailsSchema.shape,
+  ...ApplicationEducationSchema.shape,
+  ...ApplicationResumeSchema.shape,
+  ...ApplicationReviewSchema.shape,
+  internshipId: z.string().min(1, "Internship identifier is required"),
+});
 export type CompleteApplicationInput = z.infer<typeof CompleteApplicationSchema>;
 
 export const ApplicationStatusSchema = z.enum([

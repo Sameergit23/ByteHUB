@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
-import { ZodSchema, ZodError } from "zod";
+import { ZodType, ZodError } from "zod";
 
-export const validateBody = (schema: ZodSchema) => {
+export const validateBody = (schema: ZodType) => {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       req.body = await schema.parseAsync(req.body);
@@ -12,7 +12,7 @@ export const validateBody = (schema: ZodSchema) => {
           status: "fail",
           code: "VALIDATION_ERROR",
           message: "Invalid request payload",
-          errors: error.errors.map((e) => ({
+          errors: error.issues.map((e) => ({
             field: e.path.join("."),
             message: e.message,
           })),
@@ -24,10 +24,10 @@ export const validateBody = (schema: ZodSchema) => {
   };
 };
 
-export const validateQuery = (schema: ZodSchema) => {
+export const validateQuery = (schema: ZodType) => {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      req.query = await schema.parseAsync(req.query);
+      req.query = (await schema.parseAsync(req.query)) as Request["query"];
       next();
     } catch (error) {
       if (error instanceof ZodError) {
@@ -35,7 +35,7 @@ export const validateQuery = (schema: ZodSchema) => {
           status: "fail",
           code: "QUERY_VALIDATION_ERROR",
           message: "Invalid query parameters",
-          errors: error.errors.map((e) => ({
+          errors: error.issues.map((e) => ({
             field: e.path.join("."),
             message: e.message,
           })),
@@ -46,4 +46,3 @@ export const validateQuery = (schema: ZodSchema) => {
     }
   };
 };
-

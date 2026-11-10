@@ -1,17 +1,17 @@
 import { Request, Response, NextFunction } from "express";
-import { ZodSchema, ZodObject } from "zod";
+import { ZodType, ZodObject } from "zod";
 import { sanitizeDeep } from "../utils/sanitizer.js";
 
 interface RequestValidators {
-  body?: ZodSchema;
-  query?: ZodSchema;
-  params?: ZodSchema;
+  body?: ZodType;
+  query?: ZodType;
+  params?: ZodType;
 }
 
 /**
  * Enforces strict validation (rejects unknown fields) and sanitizes input data.
  */
-function toStrictSchema(schema: ZodSchema): ZodSchema {
+function toStrictSchema(schema: ZodType): ZodType {
   if (schema instanceof ZodObject) {
     return schema.strict();
   }
@@ -23,11 +23,15 @@ export function validateRequest(schemas: RequestValidators) {
     try {
       if (schemas.params) {
         const sanitizedParams = sanitizeDeep(req.params);
-        req.params = await toStrictSchema(schemas.params).parseAsync(sanitizedParams);
+        req.params = (await toStrictSchema(schemas.params).parseAsync(
+          sanitizedParams
+        )) as Request["params"];
       }
       if (schemas.query) {
         const sanitizedQuery = sanitizeDeep(req.query);
-        req.query = await toStrictSchema(schemas.query).parseAsync(sanitizedQuery);
+        req.query = (await toStrictSchema(schemas.query).parseAsync(
+          sanitizedQuery
+        )) as Request["query"];
       }
       if (schemas.body) {
         const sanitizedBody = sanitizeDeep(req.body);

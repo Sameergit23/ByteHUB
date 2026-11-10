@@ -11,9 +11,9 @@ import { getProgramme } from "../../../lib/catalog";
 export async function generateMetadata({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }): Promise<Metadata> {
-  const program = await getProgramme(params.id).catch(() => null);
+  const program = await getProgramme((await params).id).catch(() => null);
 
   if (!program) {
     return { title: "Programme Not Found — ByteHUB" };
@@ -32,8 +32,12 @@ export async function generateMetadata({
   };
 }
 
-export default async function TrainingDetailPage({ params }: { params: { id: string } }) {
-  const program = await getProgramme(params.id);
+export default async function TrainingDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const program = await getProgramme((await params).id);
 
   if (!program) {
     return notFound();

@@ -11,9 +11,9 @@ export const metadata: Metadata = {
 export default async function ApplicationFormPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
-  const internship = await getInternship(params.id);
+  const internship = await getInternship((await params).id);
 
   if (!internship) {
     return notFound();
