@@ -82,6 +82,16 @@ export class PaymentService {
       if (existingPayment.userId !== userId) {
         throw AppError.conflict("This idempotency key has already been used.");
       }
+      const madeIn = this.orderCashfreeEnv(existingPayment.metadata);
+      if (
+        madeIn &&
+        madeIn !== this.cashfreeEnvironment() &&
+        (existingPayment.status === "CREATED" || existingPayment.status === "PENDING")
+      ) {
+        throw AppError.conflict(
+          "Payment settings changed since this page was opened. Please refresh the page and try again."
+        );
+      }
       return {
         orderId: existingPayment.orderId,
         amount: existingPayment.amount,
@@ -191,6 +201,7 @@ export class PaymentService {
         cohortCode: cohort.cohortCode,
         enrollmentId: enrollment.id,
         paymentSessionId,
+        cashfreeEnv: this.cashfreeEnvironment(),
       },
     });
 
@@ -309,8 +320,10 @@ export class PaymentService {
     });
 
     // Re-use a recent open order (double clicks, closing and reopening the payment window).
-    // Cashfree orders expire after 20 minutes, so only reuse ones younger than 15.
-    const openOrder = await prisma.payment.findFirst({
+    // Cashfree orders expire after 20 minutes, so only reuse ones younger than 15, and only
+    // ones made in the current Cashfree mode (a test session doesn't work on the live page).
+    const currentEnv = this.cashfreeEnvironment();
+    const recentOrders = await prisma.payment.findMany({
       where: {
         applicationId: application.id,
         userId,
@@ -319,7 +332,11 @@ export class PaymentService {
         createdAt: { gte: new Date(Date.now() - 15 * 60 * 1000) },
       },
       orderBy: { createdAt: "desc" },
+      take: 5,
     });
+    const openOrder = recentOrders.find(
+      (order) => this.orderCashfreeEnv(order.metadata) === currentEnv
+    );
     if (openOrder) {
       return describe(openOrder);
     }
@@ -361,10 +378,21 @@ export class PaymentService {
         internshipTitle: internship.title,
         companyName: internship.companyName,
         paymentSessionId: cfOrder.paymentSessionId,
+        cashfreeEnv: currentEnv,
       },
     });
 
     return describe(payment);
+  }
+
+  /**
+   * The Cashfree mode (test or live) an order was created in, when it was recorded.
+   * A test order's payment session is rejected by the live checkout and the other way round,
+   * so an order is only reused, or checked with the gateway, in the mode it was made in.
+   */
+  private orderCashfreeEnv(metadata: unknown): "PRODUCTION" | "SANDBOX" | null {
+    const value = (metadata as { cashfreeEnv?: string } | null)?.cashfreeEnv;
+    return value === "PRODUCTION" || value === "SANDBOX" ? value : null;
   }
 
   private cashfreeEnvironment(): "PRODUCTION" | "SANDBOX" {
@@ -1217,9 +1245,48 @@ export class PaymentService {
 
       try {
         let confirmedFromGateway = false;
+        const ageHours =
+          (Date.now() - new Date(p.createdAt).getTime()) / (1000 * 60 * 60);
+        const madeIn = this.orderCashfreeEnv(p.metadata);
+
+        // Made with the other Cashfree keys (e.g. a test order after switching to live): the
+        // current keys can't see or charge it, so close it instead of asking the gateway.
+        if (
+          p.provider === "CASHFREE" &&
+          !isCashfreeMockMode() &&
+          madeIn &&
+          madeIn !== this.cashfreeEnvironment()
+        ) {
+          if (ageHours > 1) {
+            await paymentRepository.failPaymentAndReleaseSeat({
+              paymentId: p.id,
+              orderId: p.orderId,
+              reason: `Reconciliation: order was created in Cashfree ${madeIn} mode, which is no longer in use.`,
+            });
+            actionTaken = "AUTO_FAILED_OTHER_CASHFREE_MODE";
+          }
+          report.push({
+            orderId: p.orderId,
+            provider: p.provider,
+            statusInDb: p.status,
+            actionTaken,
+          });
+          continue;
+        }
 
         if (p.provider === "CASHFREE" && !isCashfreeMockMode()) {
-          const cfOrder = await CashfreeService.getOrder(p.orderId);
+          let cfOrder: CashfreeOrderStatus | null = null;
+          try {
+            cfOrder = await CashfreeService.getOrder(p.orderId);
+          } catch (lookupErr) {
+            // After a day, an unpaid order the gateway can't find (e.g. created with old keys)
+            // is closed; before that, a lookup error just leaves it for the next run.
+            if (ageHours <= 24) throw lookupErr;
+            logger.warn(
+              { err: lookupErr, orderId: p.orderId },
+              "Gateway has no record of a day-old unpaid order; closing it"
+            );
+          }
           if (cfOrder?.order_status === "PAID") {
             const result = await this.confirmCashfreePayment({
               orderId: p.orderId,
@@ -1235,8 +1302,6 @@ export class PaymentService {
           }
         }
 
-        const ageHours =
-          (Date.now() - new Date(p.createdAt).getTime()) / (1000 * 60 * 60);
         if (!confirmedFromGateway && ageHours > 1) {
           await paymentRepository.failPaymentAndReleaseSeat({
             paymentId: p.id,
