@@ -28,7 +28,7 @@ function ReturnContent() {
     }
 
     let cancelled = false;
-    confirmOrderWithServer(orderId)
+    confirmOrderWithServer(orderId, 6)
       .then((status) => {
         if (cancelled) return;
         setPayment(status);

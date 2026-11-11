@@ -82,6 +82,8 @@ export type FeePaymentResult =
   | { outcome: "paid"; orderId: string; amount: number; currency: string }
   /** The admin removed the fee in the meantime, so the application was sent for free. */
   | { outcome: "no_fee_needed" }
+  /** The browser is moving to Cashfree's payment page; it comes back to our return page. */
+  | { outcome: "redirecting" }
   /** The student closed the payment window or the payment didn't go through. */
   | { outcome: "not_paid"; reason?: string };
 
@@ -133,16 +135,40 @@ export async function payInternshipFee(applicationId: string): Promise<FeePaymen
       "The secure payment window could not be loaded. Check your connection or turn off any content blocker, then retry."
     );
   }
-  const cashfree = Cashfree({
-    mode: order.cashfreeEnv === "PRODUCTION" ? "production" : "sandbox",
-  });
-  const result = await cashfree.checkout({
-    paymentSessionId: order.paymentSessionId,
-    redirectTarget: "_modal",
-  });
+  const result = await openCashfreeCheckout(
+    Cashfree,
+    order.paymentSessionId,
+    order.cashfreeEnv
+  );
+  if (result.redirecting) return { outcome: "redirecting" };
 
-  // Whatever the window reports, the server has the final say.
+  // Whatever the gateway reports, the server has the final say.
   const status = await confirmOrderWithServer(order.orderId);
   if (status?.isPaid) return paid(status);
-  return { outcome: "not_paid", reason: result?.error?.message };
+  return { outcome: "not_paid", reason: result.error };
+}
+
+/**
+ * Sends the student to Cashfree's own payment page in the same tab. Cashfree brings them back
+ * to the order's return page (/payments/return or /training/checkout/return), which confirms
+ * the payment with our server. Card and bank verification happen on Cashfree's page, which
+ * works on every phone and is never stopped by pop-up blockers.
+ */
+export async function openCashfreeCheckout(
+  Cashfree: any,
+  paymentSessionId: string,
+  cashfreeEnv?: "PRODUCTION" | "SANDBOX"
+): Promise<{ redirecting: boolean; error?: string }> {
+  const cashfree = Cashfree({
+    mode: cashfreeEnv === "PRODUCTION" ? "production" : "sandbox",
+  });
+  const result = await cashfree.checkout({ paymentSessionId, redirectTarget: "_self" });
+  if (result?.error) {
+    return {
+      redirecting: false,
+      error: result.error.message || "Payment could not start",
+    };
+  }
+  // On phones Cashfree may finish inside a quick-pay window without leaving the page.
+  return { redirecting: Boolean(result?.redirect) };
 }

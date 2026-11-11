@@ -18,6 +18,9 @@ const apiOrigin = (
   .replace(/\/$/, "")
   .replace(/\/api$/, "");
 
+// Cashfree's checkout script opens the payment page by submitting a form to its checkout
+// address (sandbox.cashfree.com for tests, api.cashfree.com for live payments), sometimes inside
+// a frame on phones. Only those two Cashfree addresses are added for forms and frames.
 const cspHeader = `
   default-src 'self';
   script-src 'self' 'unsafe-inline' 'unsafe-eval' https://sdk.cashfree.com https://checkout.razorpay.com https://js.stripe.com;
@@ -25,13 +28,15 @@ const cspHeader = `
   img-src 'self' blob: data: https:;
   font-src 'self' data: https://fonts.gstatic.com;
   connect-src 'self' https://api.cashfree.com https://sandbox.cashfree.com https://payments.cashfree.com https://payments-test.cashfree.com https://api.razorpay.com https://lumberjack.razorpay.com https://api.stripe.com;
-  frame-src 'self' https://sdk.cashfree.com https://payments.cashfree.com https://payments-test.cashfree.com https://api.razorpay.com https://js.stripe.com https://hooks.stripe.com;
+  frame-src 'self' https://sdk.cashfree.com https://payments.cashfree.com https://payments-test.cashfree.com https://sandbox.cashfree.com https://api.cashfree.com https://api.razorpay.com https://js.stripe.com https://hooks.stripe.com;
   object-src 'none';
   base-uri 'self';
-  form-action 'self';
+  form-action 'self' https://sandbox.cashfree.com https://api.cashfree.com;
   frame-ancestors 'none';
   ${isProduction ? "block-all-mixed-content; upgrade-insecure-requests;" : ""}
-`.replace(/\s{2,}/g, " ").trim();
+`
+  .replace(/\s{2,}/g, " ")
+  .trim();
 
 const securityHeaders = [
   {
@@ -56,7 +61,8 @@ const securityHeaders = [
   },
   {
     key: "Permissions-Policy",
-    value: 'camera=(), microphone=(), geolocation=(), payment=(self "https://checkout.razorpay.com" "https://js.stripe.com")',
+    value:
+      'camera=(), microphone=(), geolocation=(), payment=(self "https://checkout.razorpay.com" "https://js.stripe.com")',
   },
 ];
 

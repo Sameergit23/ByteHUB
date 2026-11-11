@@ -447,8 +447,14 @@ export function ApplyForm({ internship }: { internship: InternshipItem }) {
   const startFeePayment = async (application: { id: string; createdAt?: string }) => {
     setIsPaying(true);
     setFeeAlert(null);
+    let leavingPage = false;
     try {
       const result = await payInternshipFee(application.id);
+      if (result.outcome === "redirecting") {
+        // The browser is opening Cashfree's payment page; keep the button busy until it does.
+        leavingPage = true;
+        return;
+      }
       if (result.outcome === "paid") {
         setPaidFee({
           orderId: result.orderId,
@@ -478,7 +484,7 @@ export function ApplyForm({ internship }: { internship: InternshipItem }) {
         describeError(err, "The payment could not be started. Please try again.")
       );
     } finally {
-      setIsPaying(false);
+      if (!leavingPage) setIsPaying(false);
     }
   };
 
@@ -728,7 +734,7 @@ export function ApplyForm({ internship }: { internship: InternshipItem }) {
                   isLoading={isPaying}
                   onClick={() => startFeePayment(feeDue)}
                 >
-                  {isPaying ? "Waiting for payment…" : `Pay ${feeLabel} securely`}
+                  {isPaying ? "Opening secure payment…" : `Pay ${feeLabel} securely`}
                 </Button>
                 <Link href="/dashboard/student">
                   <Button variant="outline" size="lg" disabled={isPaying}>

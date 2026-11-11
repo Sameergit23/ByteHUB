@@ -227,8 +227,14 @@ export default function StudentDashboardPage() {
   const handlePayFee = async (appId: string) => {
     setBusyId(appId);
     setNotice(null);
+    let leavingPage = false;
     try {
       const result = await payInternshipFee(appId);
+      if (result.outcome === "redirecting") {
+        // The browser is opening Cashfree's payment page; keep the button busy until it does.
+        leavingPage = true;
+        return;
+      }
       if (result.outcome === "paid") {
         setNotice(
           successAlert(
@@ -261,7 +267,7 @@ export default function StudentDashboardPage() {
         describeError(err, "The payment could not be started. Please try again.")
       );
     } finally {
-      setBusyId(null);
+      if (!leavingPage) setBusyId(null);
     }
   };
 
@@ -687,7 +693,7 @@ export default function StudentDashboardPage() {
                           className="self-start sm:self-auto px-4 py-2 bg-[#B8341A] text-white text-xs font-mono font-bold hover:bg-[#16150F] transition-colors disabled:opacity-50"
                         >
                           {busyId === app.id
-                            ? "Waiting for payment..."
+                            ? "Opening secure payment..."
                             : `Pay ${formatMoney(app.feeAmount, "INR")}`}
                         </button>
                       </div>

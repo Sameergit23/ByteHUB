@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { apiFetch, ApiError, getStoredUser, redirectToLogin } from "../../../../lib/api";
-import { loadCashfreeSdk } from "../../../../lib/cashfree";
+import { loadCashfreeSdk, openCashfreeCheckout } from "../../../../lib/cashfree";
 import { formatDate, formatMoney } from "../../../../lib/format";
 import { ByteHubLogo } from "../../../../components/brand/ByteHubLogo";
 import { siteConfig } from "../../../../lib/siteConfig";
@@ -185,6 +185,7 @@ export default function TrainingCheckoutPage() {
 
     setIsProcessing(true);
     setPayAlert(null);
+    let leavingPage = false;
 
     try {
       // 1. The server reserves the seat and decides the amount from its own database.
@@ -235,23 +236,26 @@ export default function TrainingCheckoutPage() {
         );
       }
 
-      const cashfree = Cashfree({
-        mode: orderData.cashfreeEnv === "PRODUCTION" ? "production" : "sandbox",
-      });
+      // Cashfree's own page opens in this tab and brings the student back to
+      // /training/checkout/return, which confirms the payment with our server.
+      const result = await openCashfreeCheckout(
+        Cashfree,
+        orderData.paymentSessionId,
+        orderData.cashfreeEnv
+      );
+      if (result.redirecting) {
+        leavingPage = true;
+        return;
+      }
 
-      const result = await cashfree.checkout({
-        paymentSessionId: orderData.paymentSessionId,
-        redirectTarget: "_modal",
-      });
-
-      // 4. Whatever the window reports, the server has the final say.
+      // 4. Whatever the gateway reports, the server has the final say.
       const paid = await confirmWithServer(orderData.orderId);
       if (!paid) {
         setPayAlert(
           makeAlert(
             "payment",
             "Payment not completed",
-            `${result?.error?.message ? `${result.error.message}. ` : ""}No money has been taken. You can try again while your seat is held.`
+            `${result.error ? `${result.error}. ` : ""}No money has been taken. You can try again while your seat is held.`
           )
         );
       }
@@ -266,7 +270,7 @@ export default function TrainingCheckoutPage() {
         describeError(err, "The payment could not be started. Please try again.")
       );
     } finally {
-      setIsProcessing(false);
+      if (!leavingPage) setIsProcessing(false);
     }
   };
 
