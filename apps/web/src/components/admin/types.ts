@@ -44,6 +44,8 @@ export interface AdminInternship {
   location: string;
   type: string;
   stipendAmount: number;
+  /** Paid online by the student when applying, in paise. 0 = free. */
+  registrationFeeAmount: number;
   currency: string;
   durationMonths: number;
   description: string;
@@ -110,6 +112,8 @@ export interface AdminPayment {
   provider: string;
   createdAt: string;
   user: { id: string; name: string; email: string } | null;
+  /** A training seat, or an internship registration fee. */
+  kind?: "TRAINING" | "INTERNSHIP_FEE";
   cohortCode: string | null;
   programmeTitle: string | null;
   refundedAmount: number;
@@ -173,7 +177,23 @@ export interface Envelope<T> {
 }
 
 export type ApplicationStatus =
-  "SUBMITTED" | "UNDER_REVIEW" | "INTERVIEW" | "OFFERED" | "REJECTED" | "WITHDRAWN";
+  | "PENDING_PAYMENT"
+  | "SUBMITTED"
+  | "UNDER_REVIEW"
+  | "INTERVIEW"
+  | "OFFERED"
+  | "REJECTED"
+  | "WITHDRAWN";
+
+/** The registration fee a student paid with an application (and any refund of it). */
+export interface ApplicationFee {
+  orderId: string;
+  amount: number;
+  currency: string;
+  status: "PAID" | "REFUNDED" | "PARTIALLY_REFUNDED";
+  refundedAmount: number;
+  refundedAt: string | null;
+}
 
 export interface AdminApplication {
   id: string;
@@ -181,22 +201,35 @@ export interface AdminApplication {
   fullName: string;
   email: string;
   phone: string;
+  country?: string | null;
+  pincode?: string | null;
+  addressLine?: string | null;
+  locality?: string | null;
+  city?: string | null;
+  state?: string | null;
   collegeOrUniversity: string;
   graduationYear: number;
   degree: string;
-  githubUrl: string;
-  linkedinUrl: string;
+  githubUrl: string | null;
+  linkedinUrl: string | null;
   portfolioUrl: string | null;
-  bioSummary: string;
-  whyInterested: string;
-  relevantProjectDescription: string;
+  bioSummary: string | null;
+  whyInterested: string | null;
+  relevantProjectDescription: string | null;
   availableHoursPerWeek: number;
   earliestStartDate: string;
   status: ApplicationStatus;
   feedbackNote: string | null;
   createdAt: string;
   hasResume: boolean;
-  internship: { id: string; title: string; companyName: string; slug: string } | null;
+  fee: ApplicationFee | null;
+  internship: {
+    id: string;
+    title: string;
+    companyName: string;
+    slug: string;
+    registrationFeeAmount?: number;
+  } | null;
 }
 
 export interface AdminTrack {

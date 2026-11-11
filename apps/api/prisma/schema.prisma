@@ -36,6 +36,7 @@ enum ApplicationStatus {
   OFFERED
   REJECTED
   WITHDRAWN
+  PENDING_PAYMENT // Saved, but the internship's registration fee is not paid yet
 }
 
 enum PaymentProvider {
@@ -66,16 +67,16 @@ enum EnrollmentStatus {
 // ---------------------------------------------------------------------------
 
 model User {
-  id                      String                   @id @default(uuid())
-  email                   String                   @unique
-  passwordHash            String
-  name                    String
-  role                    Role                     @default(STUDENT)
-  isEmailVerified         Boolean                  @default(false)
-  organizationName        String?
-  deletedAt               DateTime?
-  createdAt               DateTime                 @default(now())
-  updatedAt               DateTime                 @updatedAt
+  id               String    @id @default(uuid())
+  email            String    @unique
+  passwordHash     String
+  name             String
+  role             Role      @default(STUDENT)
+  isEmailVerified  Boolean   @default(false)
+  organizationName String?
+  deletedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   studentProfile          StudentProfile?
   companyProfile          CompanyProfile?
@@ -182,36 +183,36 @@ model CompanyProfile {
 // ---------------------------------------------------------------------------
 
 model Track {
-  id           String       @id @default(uuid())
-  slug         String       @unique
+  id           String   @id @default(uuid())
+  slug         String   @unique
   name         String
   description  String
-  displayOrder Int          @default(0)
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  displayOrder Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  programmes   Programme[]
-  internships  Internship[]
+  programmes  Programme[]
+  internships Internship[]
 
   @@index([slug])
   @@index([displayOrder])
 }
 
 model Programme {
-  id            String    @id @default(uuid())
+  id            String   @id @default(uuid())
   trackId       String
-  track         Track     @relation(fields: [trackId], references: [id], onDelete: Restrict)
-  slug          String    @unique
+  track         Track    @relation(fields: [trackId], references: [id], onDelete: Restrict)
+  slug          String   @unique
   title         String
   summary       String
   description   String
   syllabus      Json
   prerequisites String[]
-  published     Boolean   @default(true)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  published     Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  cohorts       Cohort[]
+  cohorts Cohort[]
 
   @@index([trackId])
   @@index([slug])
@@ -219,25 +220,25 @@ model Programme {
 }
 
 model Cohort {
-  id            String       @id @default(uuid())
+  id            String    @id @default(uuid())
   programmeId   String
-  programme     Programme    @relation(fields: [programmeId], references: [id], onDelete: Restrict)
-  cohortCode    String       @unique
+  programme     Programme @relation(fields: [programmeId], references: [id], onDelete: Restrict)
+  cohortCode    String    @unique
   name          String
-  mode          String       // REMOTE, ON_SITE, HYBRID
+  mode          String // REMOTE, ON_SITE, HYBRID
   startDate     DateTime
   endDate       DateTime
   durationWeeks Int
   seatsTotal    Int
   seatsLeft     Int
-  priceAmount   Int          // Smallest unit (e.g. 2400000 paise = 24,000 INR). Never floats.
-  currency      String       @default("INR")
-  published     Boolean      @default(true)
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  priceAmount   Int // Smallest unit (e.g. 2400000 paise = 24,000 INR). Never floats.
+  currency      String    @default("INR")
+  published     Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  enrollments   Enrollment[]
-  payments      Payment[]
+  enrollments Enrollment[]
+  payments    Payment[]
 
   @@index([programmeId])
   @@index([startDate])
@@ -249,31 +250,32 @@ model Cohort {
 // ---------------------------------------------------------------------------
 
 model Internship {
-  id             String           @id @default(uuid())
-  companyId      String
-  company        User             @relation("CompanyInternships", fields: [companyId], references: [id], onDelete: Cascade)
-  trackId        String?
-  track          Track?           @relation(fields: [trackId], references: [id], onDelete: SetNull)
-  slug           String           @unique
-  title          String
-  companyName    String
-  location       String
-  type           InternshipType   @default(REMOTE)
-  stipendAmount  Int              @default(0) // Smallest unit (e.g. 3500000 paise = 35,000 INR). Never floats.
-  currency       String           @default("INR")
-  durationMonths Int              @default(3)
-  description    String
-  whatYouWillDo  String[]
-  requirements   String[]
-  skills         String[]
-  openings       Int              @default(1)
-  deadline       DateTime
-  status         InternshipStatus @default(PUBLISHED)
-  deletedAt      DateTime?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  id                    String           @id @default(uuid())
+  companyId             String
+  company               User             @relation("CompanyInternships", fields: [companyId], references: [id], onDelete: Cascade)
+  trackId               String?
+  track                 Track?           @relation(fields: [trackId], references: [id], onDelete: SetNull)
+  slug                  String           @unique
+  title                 String
+  companyName           String
+  location              String
+  type                  InternshipType   @default(REMOTE)
+  stipendAmount         Int              @default(0) // Smallest unit (e.g. 3500000 paise = 35,000 INR). Never floats.
+  registrationFeeAmount Int              @default(0) // Paid by the student to apply, in paise. 0 = free.
+  currency              String           @default("INR")
+  durationMonths        Int              @default(3)
+  description           String
+  whatYouWillDo         String[]
+  requirements          String[]
+  skills                String[]
+  openings              Int              @default(1)
+  deadline              DateTime
+  status                InternshipStatus @default(PUBLISHED)
+  deletedAt             DateTime?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
 
-  applications   Application[]
+  applications Application[]
 
   @@index([companyId])
   @@index([trackId])
@@ -292,16 +294,23 @@ model Application {
   fullName                   String
   email                      String
   phone                      String
+  // Address (city and state come from the PIN code lookup on the form)
+  country                    String?
+  pincode                    String?
+  addressLine                String?
+  locality                   String?
+  city                       String?
+  state                      String?
   collegeOrUniversity        String
   graduationYear             Int
   degree                     String
-  githubUrl                  String
-  linkedinUrl                String
+  githubUrl                  String?
+  linkedinUrl                String?
   portfolioUrl               String?
   resumeUrl                  String
-  bioSummary                 String
-  whyInterested              String
-  relevantProjectDescription String
+  bioSummary                 String?
+  whyInterested              String?
+  relevantProjectDescription String?
   availableHoursPerWeek      Int
   earliestStartDate          DateTime
   status                     ApplicationStatus @default(SUBMITTED)
@@ -309,6 +318,8 @@ model Application {
   deletedAt                  DateTime?
   createdAt                  DateTime          @default(now())
   updatedAt                  DateTime          @updatedAt
+
+  payments Payment[]
 
   // Unique constraint: one active application per student per internship
   @@unique([studentId, internshipId])
@@ -338,7 +349,7 @@ model Enrollment {
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
 
-  certificate   Certificate?
+  certificate Certificate?
 
   // Unique constraint: one enrollment per student per cohort
   @@unique([userId, cohortId])
@@ -349,29 +360,33 @@ model Enrollment {
 }
 
 model Payment {
-  id                   String          @id @default(uuid())
-  orderId              String          @unique
-  userId               String
-  user                 User            @relation(fields: [userId], references: [id], onDelete: Restrict)
-  cohortId             String
-  cohort               Cohort          @relation(fields: [cohortId], references: [id], onDelete: Restrict)
-  provider             PaymentProvider
-  amount               Int             // Smallest unit (e.g. paise or cents). Never floats.
-  currency             String          @default("INR")
-  status               PaymentStatus   @default(CREATED)
-  gatewayPaymentId     String?
-  gatewaySignature     String?
-  idempotencyKey       String          @unique
-  metadata             Json?
-  createdAt            DateTime        @default(now())
-  updatedAt            DateTime        @updatedAt
+  id               String          @id @default(uuid())
+  orderId          String          @unique
+  userId           String
+  user             User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  // A payment is either for a training cohort or for an internship registration fee.
+  cohortId         String?
+  cohort           Cohort?         @relation(fields: [cohortId], references: [id], onDelete: Restrict)
+  applicationId    String?
+  application      Application?    @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+  provider         PaymentProvider
+  amount           Int // Smallest unit (e.g. paise or cents). Never floats.
+  currency         String          @default("INR")
+  status           PaymentStatus   @default(CREATED)
+  gatewayPaymentId String?
+  gatewaySignature String?
+  idempotencyKey   String          @unique
+  metadata         Json?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 
-  enrollments          Enrollment[]
-  refunds              Refund[]
-  paymentEvents        PaymentEvent[]
+  enrollments   Enrollment[]
+  refunds       Refund[]
+  paymentEvents PaymentEvent[]
 
   @@index([userId])
   @@index([cohortId])
+  @@index([applicationId])
   @@index([status])
   @@index([orderId])
   @@index([idempotencyKey])
@@ -403,7 +418,7 @@ model Refund {
   id              String   @id @default(uuid())
   paymentId       String
   payment         Payment  @relation(fields: [paymentId], references: [id], onDelete: Restrict)
-  amount          Int      // Smallest unit (paise/cents). Never floats.
+  amount          Int // Smallest unit (paise/cents). Never floats.
   currency        String   @default("INR")
   reason          String
   gatewayRefundId String?  @unique

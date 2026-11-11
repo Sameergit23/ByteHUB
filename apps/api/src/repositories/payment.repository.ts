@@ -15,6 +15,13 @@ export class PaymentRepository {
         cohort: {
           include: { programme: true },
         },
+        application: {
+          include: {
+            internship: {
+              select: { id: true, title: true, companyName: true, slug: true },
+            },
+          },
+        },
       },
     });
   }
@@ -26,6 +33,13 @@ export class PaymentRepository {
         user: { select: { id: true, name: true, email: true, role: true } },
         cohort: {
           include: { programme: true },
+        },
+        application: {
+          include: {
+            internship: {
+              select: { id: true, title: true, companyName: true, slug: true },
+            },
+          },
         },
         refunds: true,
       },
@@ -40,6 +54,13 @@ export class PaymentRepository {
         cohort: {
           include: { programme: true },
         },
+        application: {
+          include: {
+            internship: {
+              select: { id: true, title: true, companyName: true, slug: true },
+            },
+          },
+        },
         refunds: true,
       },
     });
@@ -48,7 +69,10 @@ export class PaymentRepository {
   async create(data: {
     orderId: string;
     userId: string;
-    cohortId: string;
+    /** Set for a training seat. */
+    cohortId?: string | null;
+    /** Set for an internship registration fee. */
+    applicationId?: string | null;
     provider: "CASHFREE" | "RAZORPAY" | "STRIPE";
     amount: number;
     currency: string;
@@ -59,7 +83,8 @@ export class PaymentRepository {
       data: {
         orderId: data.orderId,
         userId: data.userId,
-        cohortId: data.cohortId,
+        cohortId: data.cohortId ?? null,
+        applicationId: data.applicationId ?? null,
         provider: data.provider,
         amount: data.amount,
         currency: data.currency,
@@ -70,6 +95,13 @@ export class PaymentRepository {
       include: {
         cohort: {
           include: { programme: true },
+        },
+        application: {
+          include: {
+            internship: {
+              select: { id: true, title: true, companyName: true, slug: true },
+            },
+          },
         },
       },
     });
@@ -151,11 +183,11 @@ export class PaymentRepository {
   }
 
   // --- ACID Transaction: Fulfill Payment and Activate Enrollment ---
+  // A training payment activates the seat; an internship fee payment submits the application.
   async fulfillPaymentAndEnrolment(params: {
     paymentId: string;
     orderId: string;
     userId: string;
-    cohortId: string;
     gatewayPaymentId: string;
     gatewaySignature?: string;
     eventId?: string;
@@ -188,11 +220,54 @@ export class PaymentRepository {
         },
       });
 
-      // 3. Find or update enrollment
+      // 3a. Internship registration fee: the application now reaches the admin team.
+      if (payment.applicationId) {
+        const application = await tx.application.findUnique({
+          where: { id: payment.applicationId },
+        });
+        if (application?.status === "PENDING_PAYMENT") {
+          await tx.application.update({
+            where: { id: application.id },
+            data: { status: "SUBMITTED" },
+          });
+        }
+
+        if (params.eventId) {
+          await tx.paymentEvent.updateMany({
+            where: { eventId: params.eventId },
+            data: { processed: true, paymentId: updatedPayment.id },
+          });
+        }
+
+        await tx.auditLog.create({
+          data: {
+            userId: params.userId,
+            action: "PAYMENT_CAPTURED",
+            entityType: "PAYMENT",
+            entityId: updatedPayment.id,
+            details: {
+              orderId: params.orderId,
+              gatewayPaymentId: params.gatewayPaymentId,
+              amount: updatedPayment.amount,
+              currency: updatedPayment.currency,
+              applicationId: payment.applicationId,
+              applicationStatusBefore: application?.status ?? null,
+            },
+          },
+        });
+
+        return { payment: updatedPayment, enrollment: null };
+      }
+
+      // 3b. Training seat: find or update the enrolment.
+      const cohortId = payment.cohortId;
+      if (!cohortId) {
+        throw new Error("PAYMENT_HAS_NO_COHORT_OR_APPLICATION");
+      }
       let enrollment = await tx.enrollment.findFirst({
         where: {
           userId: params.userId,
-          cohortId: params.cohortId,
+          cohortId,
         },
       });
 
@@ -202,7 +277,7 @@ export class PaymentRepository {
           await tx.$executeRaw`
             UPDATE "Cohort"
             SET "seatsLeft" = GREATEST(0, "seatsLeft" - 1), "updatedAt" = NOW()
-            WHERE "id" = ${params.cohortId};
+            WHERE "id" = ${cohortId};
           `;
         }
 
@@ -219,7 +294,7 @@ export class PaymentRepository {
         enrollment = await tx.enrollment.create({
           data: {
             userId: params.userId,
-            cohortId: params.cohortId,
+            cohortId,
             paymentId: updatedPayment.id,
             status: "ACTIVE",
             priceAmount: updatedPayment.amount,
@@ -249,7 +324,7 @@ export class PaymentRepository {
             gatewayPaymentId: params.gatewayPaymentId,
             amount: updatedPayment.amount,
             currency: updatedPayment.currency,
-            cohortId: params.cohortId,
+            cohortId,
             enrollmentId: enrollment.id,
           },
         },
@@ -285,14 +360,17 @@ export class PaymentRepository {
         data: { status: PaymentStatus.FAILED },
       });
 
-      // Find pending enrollment and release
-      const enrollment = await tx.enrollment.findFirst({
-        where: {
-          userId: payment.userId,
-          cohortId: payment.cohortId,
-          status: "PENDING",
-        },
-      });
+      // Find pending enrollment and release (internship fee payments hold no seat;
+      // their application simply stays "awaiting payment" so the student can try again)
+      const enrollment = payment.cohortId
+        ? await tx.enrollment.findFirst({
+            where: {
+              userId: payment.userId,
+              cohortId: payment.cohortId,
+              status: "PENDING",
+            },
+          })
+        : null;
 
       if (enrollment) {
         await tx.enrollment.update({
@@ -325,6 +403,7 @@ export class PaymentRepository {
             orderId: params.orderId,
             reason: params.reason,
             cohortId: payment.cohortId,
+            applicationId: payment.applicationId,
           },
         },
       });
@@ -394,7 +473,7 @@ export class PaymentRepository {
       });
 
       // If full refund: cancel enrollment and release seat back to cohort
-      if (isFullRefund) {
+      if (isFullRefund && payment.cohortId) {
         const enrollment = await tx.enrollment.findFirst({
           where: {
             userId: payment.userId,

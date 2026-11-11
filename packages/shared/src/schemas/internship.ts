@@ -9,11 +9,20 @@ export const CreateInternshipSchema = z.object({
   location: z.string().trim().min(2).max(100),
   type: InternshipTypeSchema,
   stipend: z.number().int().nonnegative("Stipend must be positive or 0"),
+  // Paid online by the student when applying, in rupees. 0 (or left out) = free to apply.
+  registrationFee: z
+    .number()
+    .int("Registration fee must be a whole number of rupees")
+    .min(0, "Registration fee can't be negative")
+    .max(50000, "Registration fee can be at most ₹50,000")
+    .optional(),
   currency: z.enum(["INR", "USD"]).default("INR"),
   durationMonths: z.number().int().min(1).max(24),
   description: z.string().trim().min(50, "Description must be at least 50 characters"),
   whatYouWillDo: z.array(z.string().trim()).default([]),
-  requirements: z.array(z.string().trim().min(2)).min(1, "At least one requirement is needed"),
+  requirements: z
+    .array(z.string().trim().min(2))
+    .min(1, "At least one requirement is needed"),
   skills: z.array(z.string().trim().min(1)).min(1, "At least one skill required"),
   openings: z.number().int().min(1).default(1),
   deadline: z.string().datetime("Must be a valid ISO date-time"),

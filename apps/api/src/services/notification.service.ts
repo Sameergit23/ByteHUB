@@ -5,6 +5,7 @@ import {
   renderVerifyEmailHtml,
   renderResetPasswordHtml,
   renderApplicationReceivedHtml,
+  renderApplicationFeePaidHtml,
   renderStatusChangedHtml,
   renderPaymentReceiptHtml,
   renderEnrolmentConfirmedHtml,
@@ -127,12 +128,41 @@ export const notificationService = {
     });
   },
 
+  /** Application received, with the receipt for its registration fee. */
+  async sendApplicationFeePaid(params: {
+    studentName: string;
+    studentEmail: string;
+    roleTitle: string;
+    companyName: string;
+    applicationId: string;
+    orderId: string;
+    amountMinor: number;
+    currency: string;
+  }) {
+    const amount = formatMoney(params.amountMinor, params.currency);
+    await enqueue("APPLICATION_FEE_PAID", {
+      to: params.studentEmail,
+      subject: `Application received: ${params.roleTitle} at ${params.companyName}`,
+      html: renderApplicationFeePaidHtml({
+        studentName: params.studentName,
+        roleTitle: params.roleTitle,
+        companyName: params.companyName,
+        applicationId: params.applicationId,
+        orderId: params.orderId,
+        amountFormatted: amount,
+      }),
+      text: `Hi ${params.studentName},\n\nWe received your registration fee of ${amount}, so your application for ${params.roleTitle} at ${params.companyName} is now with our team for review.\nApplication ID: ${params.applicationId}\nOrder ID: ${params.orderId}\n\nIf you are not selected, the fee is refunded in full to the account you paid from.\n\nTrack it here: ${frontendUrl("/dashboard/student")}`,
+    });
+  },
+
   async sendApplicationStatusChanged(params: {
     studentName: string;
     studentEmail: string;
     roleTitle: string;
     companyName: string;
     newStatus: string;
+    /** Extra line for the student, e.g. about a refund. */
+    note?: string;
   }) {
     const label = params.newStatus.replace(/_/g, " ");
     await enqueue("APPLICATION_STATUS_CHANGED", {
@@ -142,9 +172,10 @@ export const notificationService = {
         params.studentName,
         params.roleTitle,
         params.companyName,
-        label
+        label,
+        params.note
       ),
-      text: `Hi ${params.studentName},\n\nYour application for ${params.roleTitle} at ${params.companyName} is now: ${label}.\n\nDetails: ${frontendUrl("/dashboard/student")}`,
+      text: `Hi ${params.studentName},\n\nYour application for ${params.roleTitle} at ${params.companyName} is now: ${label}.${params.note ? `\n\n${params.note}` : ""}\n\nDetails: ${frontendUrl("/dashboard/student")}`,
     });
   },
 

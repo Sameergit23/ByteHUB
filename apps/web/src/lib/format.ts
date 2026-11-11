@@ -15,6 +15,13 @@ export function formatStipend(amountMinor: number, currency = "INR"): string {
   return amountMinor > 0 ? `${formatMoney(amountMinor, currency)} / mo` : "Unpaid";
 }
 
+/** Registration fee for applying to an internship (always INR, paid online). */
+export function formatRegistrationFee(amountMinor: number | null | undefined): string {
+  return amountMinor && amountMinor > 0
+    ? formatMoney(amountMinor, "INR")
+    : "Free to apply";
+}
+
 /** "15 Dec 2026" — fixed locale and UTC so server and browser render the same text. */
 export function formatDate(value: string | Date | null | undefined): string {
   if (!value) return "—";

@@ -7,7 +7,9 @@ import {
   resumeExists,
   signResumeUrl,
 } from "../utils/resumeStorage.js";
-import { notificationService } from "./notification.service.js";
+import { notificationService, formatMoney } from "./notification.service.js";
+import { paymentService } from "./paymentService.js";
+import { logger } from "../utils/logger.js";
 
 export class ApplicationService {
   /**
@@ -50,11 +52,13 @@ export class ApplicationService {
       },
     });
 
-    if (existing) {
+    // An application saved earlier but never paid for can be sent again (it is updated in place).
+    if (existing && existing.status !== "PENDING_PAYMENT") {
       throw AppError.conflict(
         `You have already submitted an application for ${internship.title} on ${existing.createdAt.toISOString().slice(0, 10)}.`
       );
     }
+    const feeAmount = internship.registrationFeeAmount; // paise; 0 = free to apply
 
     // 4. The resume must be a file uploaded to our vault. Only its key is stored, so the
     //    application never carries an expiring link or an arbitrary outside URL.
@@ -65,48 +69,81 @@ export class ApplicationService {
       );
     }
 
-    // 5. Create application and audit log inside transaction
+    // 5. Create application and audit log inside transaction. With a registration fee the
+    //    application waits as PENDING_PAYMENT and only reaches the admin team once paid.
+    const fields = {
+      fullName: input.fullName,
+      email: input.email,
+      phone: input.phone,
+      collegeOrUniversity: input.collegeOrUniversity,
+      graduationYear: input.graduationYear,
+      degree: input.degree,
+      githubUrl: input.githubUrl || null,
+      linkedinUrl: input.linkedinUrl || null,
+      portfolioUrl: input.portfolioUrl || null,
+      resumeUrl: resumeKey,
+      bioSummary: input.bioSummary || null,
+      whyInterested: input.whyInterested || null,
+      relevantProjectDescription: input.relevantProjectDescription || null,
+      country: input.country || null,
+      pincode: input.pincode || null,
+      addressLine: input.addressLine || null,
+      locality: input.locality || null,
+      // Older copies of the form send a single "City, Country" line instead.
+      city: input.city || input.location || null,
+      state: input.state || null,
+      availableHoursPerWeek: input.availableHoursPerWeek,
+      earliestStartDate: new Date(input.earliestStartDate),
+    };
+    const status = feeAmount > 0 ? ("PENDING_PAYMENT" as const) : ("SUBMITTED" as const);
+
     const application = await prisma.$transaction(async (tx) => {
-      const created = await tx.application.create({
-        data: {
-          internshipId: internship.id,
-          studentId,
-          fullName: input.fullName,
-          email: input.email,
-          phone: input.phone,
-          collegeOrUniversity: input.collegeOrUniversity,
-          graduationYear: input.graduationYear,
-          degree: input.degree,
-          githubUrl: input.githubUrl,
-          linkedinUrl: input.linkedinUrl,
-          portfolioUrl: input.portfolioUrl || null,
-          resumeUrl: resumeKey,
-          bioSummary: input.bioSummary,
-          whyInterested: input.whyInterested,
-          relevantProjectDescription: input.relevantProjectDescription,
-          availableHoursPerWeek: input.availableHoursPerWeek,
-          earliestStartDate: new Date(input.earliestStartDate),
-          status: "SUBMITTED",
-        },
-      });
+      const saved = existing
+        ? await tx.application.update({
+            where: { id: existing.id },
+            data: { ...fields, status },
+          })
+        : await tx.application.create({
+            data: {
+              internshipId: internship.id,
+              studentId,
+              ...fields,
+              status,
+            },
+          });
 
       await tx.auditLog.create({
         data: {
           userId: studentId,
-          action: "APPLICATION_SUBMITTED",
+          action:
+            status === "SUBMITTED"
+              ? "APPLICATION_SUBMITTED"
+              : "APPLICATION_SAVED_AWAITING_FEE",
           entityType: "APPLICATION",
-          entityId: created.id,
+          entityId: saved.id,
           ipAddress: ip,
           details: {
             internshipId: internship.id,
             internshipTitle: internship.title,
             companyName: internship.companyName,
+            ...(feeAmount > 0 ? { registrationFeeAmount: feeAmount } : {}),
           },
         },
       });
 
-      return created;
+      return saved;
     });
+
+    if (status === "PENDING_PAYMENT") {
+      // The confirmation email goes out once the fee is paid.
+      return {
+        application,
+        paymentRequired: true,
+        registrationFeeAmount: feeAmount,
+        currency: "INR",
+        confirmationMessage: `Your application for ${internship.title} is saved. Pay the ${formatMoney(feeAmount, "INR")} registration fee to send it to our team.`,
+      };
+    }
 
     await notificationService.sendApplicationReceived({
       studentName: application.fullName,
@@ -118,6 +155,9 @@ export class ApplicationService {
 
     return {
       application,
+      paymentRequired: false,
+      registrationFeeAmount: 0,
+      currency: "INR",
       confirmationMessage: `Your application for ${internship.title} at ${internship.companyName} has been received. A confirmation email is on its way and it is listed on your Student Dashboard.`,
     };
   }
@@ -191,9 +231,16 @@ export class ApplicationService {
             location: true,
             type: true,
             stipendAmount: true,
+            registrationFeeAmount: true,
             currency: true,
             deadline: true,
           },
+        },
+        payments: {
+          where: { status: { in: ["PAID", "REFUNDED", "PARTIALLY_REFUNDED"] } },
+          select: { orderId: true, amount: true, currency: true, status: true },
+          orderBy: { createdAt: "desc" },
+          take: 1,
         },
       },
       orderBy: { createdAt: "desc" },
@@ -283,6 +330,7 @@ export class ApplicationService {
       where: {
         internshipId,
         deletedAt: null,
+        status: { not: "PENDING_PAYMENT" },
       },
       orderBy: { createdAt: "desc" },
     });
@@ -295,6 +343,7 @@ export class ApplicationService {
     return prisma.application.findMany({
       where: {
         deletedAt: null,
+        status: { not: "PENDING_PAYMENT" },
         internship: { companyId, deletedAt: null },
       },
       select: {
@@ -354,6 +403,14 @@ export class ApplicationService {
     if (status === "WITHDRAWN") {
       throw AppError.badRequest("Only the candidate can withdraw an application.");
     }
+    if (application.status === "PENDING_PAYMENT") {
+      throw AppError.badRequest(
+        "This applicant hasn't paid the registration fee yet, so the application can't be reviewed."
+      );
+    }
+    if (status === "PENDING_PAYMENT") {
+      throw AppError.badRequest("Choose a review stage for this application.");
+    }
 
     const updated = await prisma.application.update({
       where: { id: applicationId },
@@ -362,6 +419,37 @@ export class ApplicationService {
         feedbackNote: feedbackNote || null,
       },
     });
+
+    // "Refund if not selected": rejecting an applicant who paid the registration fee records a
+    // full refund. The money itself is sent from the Cashfree dashboard by an admin.
+    let feeRefund: { amount: number; currency: string; orderId: string } | null = null;
+    let feeRefundError: string | null = null;
+    if (updated.status === "REJECTED" && application.status !== "REJECTED") {
+      const feePayment = await prisma.payment.findFirst({
+        where: { applicationId, status: { in: ["PAID", "PARTIALLY_REFUNDED"] } },
+        orderBy: { createdAt: "desc" },
+      });
+      if (feePayment) {
+        try {
+          const result = await paymentService.processRefund(userId, {
+            paymentId: feePayment.id,
+            reason: "Not selected for the internship: registration fee refunded in full",
+          });
+          feeRefund = {
+            amount: result.refund.amount,
+            currency: result.refund.currency,
+            orderId: feePayment.orderId,
+          };
+        } catch (err) {
+          feeRefundError =
+            err instanceof Error ? err.message : "Refund could not be recorded.";
+          logger.error(
+            { err, applicationId, orderId: feePayment.orderId },
+            "Could not record the registration fee refund for a rejected application"
+          );
+        }
+      }
+    }
 
     if (updated.status !== application.status) {
       await prisma.auditLog
@@ -382,10 +470,13 @@ export class ApplicationService {
         roleTitle: application.internship.title,
         companyName: application.internship.companyName,
         newStatus: updated.status,
+        note: feeRefund
+          ? `Your registration fee of ${formatMoney(feeRefund.amount, feeRefund.currency)} will be refunded in full to the account you paid from. Refunds usually reach you within 5 to 7 working days.`
+          : undefined,
       });
     }
 
-    return updated;
+    return { ...updated, feeRefund, feeRefundError };
   }
 }
 

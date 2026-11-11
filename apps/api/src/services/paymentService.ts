@@ -211,6 +211,162 @@ export class PaymentService {
     };
   }
 
+  /**
+   * Starts (or resumes) the Cashfree checkout for an internship's registration fee.
+   * The amount always comes from the internship in the database, never from the browser.
+   * Once paid, the application moves from PENDING_PAYMENT to SUBMITTED.
+   */
+  async createApplicationFeeIntent(userId: string, applicationId: string) {
+    if (!applicationId || typeof applicationId !== "string") {
+      throw AppError.badRequest("applicationId is required.");
+    }
+
+    const application = await prisma.application.findUnique({
+      where: { id: applicationId },
+      include: { internship: true },
+    });
+    if (!application || application.deletedAt || application.studentId !== userId) {
+      throw AppError.notFound("Application not found.");
+    }
+    if (application.status === "WITHDRAWN") {
+      throw AppError.badRequest(
+        "This application was withdrawn, so there is nothing to pay."
+      );
+    }
+    if (application.status !== "PENDING_PAYMENT") {
+      throw AppError.conflict(
+        "The registration fee for this application is already paid."
+      );
+    }
+
+    const internship = application.internship;
+    if (
+      internship.deletedAt ||
+      internship.status !== "PUBLISHED" ||
+      new Date() > new Date(internship.deadline)
+    ) {
+      throw AppError.badRequest(
+        "This internship is no longer taking applications, so the fee can't be paid."
+      );
+    }
+
+    const amount = internship.registrationFeeAmount; // paise
+    if (amount <= 0) {
+      // The fee was removed after the student applied: submit the application free of charge.
+      await prisma.application.update({
+        where: { id: application.id },
+        data: { status: "SUBMITTED" },
+      });
+      await prisma.auditLog
+        .create({
+          data: {
+            userId,
+            action: "APPLICATION_SUBMITTED",
+            entityType: "APPLICATION",
+            entityId: application.id,
+            details: {
+              internshipId: internship.id,
+              note: "Fee removed by admin; submitted without payment",
+            },
+          },
+        })
+        .catch(() => null);
+      await notificationService.sendApplicationReceived({
+        studentName: application.fullName,
+        studentEmail: application.email,
+        roleTitle: internship.title,
+        companyName: internship.companyName,
+        applicationId: application.id,
+      });
+      return {
+        feeRequired: false as const,
+        status: "SUBMITTED",
+        applicationId: application.id,
+      };
+    }
+
+    const describe = (payment: {
+      orderId: string;
+      amount: number;
+      currency: string;
+      provider: string;
+      status: string;
+      metadata: unknown;
+    }) => ({
+      feeRequired: true as const,
+      applicationId: application.id,
+      orderId: payment.orderId,
+      amount: payment.amount,
+      currency: payment.currency,
+      provider: payment.provider,
+      status: payment.status,
+      paymentSessionId: (payment.metadata as { paymentSessionId?: string } | null)
+        ?.paymentSessionId,
+      cashfreeEnv: this.cashfreeEnvironment(),
+      isTestMode: isCashfreeMockMode(),
+      internshipTitle: internship.title,
+      companyName: internship.companyName,
+    });
+
+    // Re-use a recent open order (double clicks, closing and reopening the payment window).
+    // Cashfree orders expire after 20 minutes, so only reuse ones younger than 15.
+    const openOrder = await prisma.payment.findFirst({
+      where: {
+        applicationId: application.id,
+        userId,
+        amount,
+        status: { in: ["CREATED", "PENDING"] },
+        createdAt: { gte: new Date(Date.now() - 15 * 60 * 1000) },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    if (openOrder) {
+      return describe(openOrder);
+    }
+
+    const orderId = `order_cf_${Date.now().toString(36)}_${crypto.randomBytes(4).toString("hex")}`;
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true, email: true },
+    });
+    const phoneDigits = (application.phone || "").replace(/\D/g, "").slice(-10);
+    const frontend = env.FRONTEND_URL.replace(/\/$/, "");
+
+    const cfOrder = await CashfreeService.createOrder({
+      orderId,
+      amount: amount / 100, // paise to INR
+      currency: "INR",
+      customer: {
+        customerId: userId,
+        customerName: user?.name || application.fullName || "ByteHUB Student",
+        customerEmail: user?.email || application.email,
+        customerPhone: phoneDigits.length === 10 ? phoneDigits : undefined,
+      },
+      returnUrl: `${frontend}/payments/return?order_id={order_id}`,
+      notifyUrl: env.API_PUBLIC_URL
+        ? `${env.API_PUBLIC_URL.replace(/\/$/, "")}/api/payments/webhooks/cashfree`
+        : undefined,
+    });
+
+    const payment = await paymentRepository.create({
+      orderId,
+      userId,
+      applicationId: application.id,
+      provider: "CASHFREE",
+      amount,
+      currency: "INR",
+      idempotencyKey: `appfee_${application.id}_${orderId}`,
+      metadata: {
+        kind: "INTERNSHIP_FEE",
+        internshipTitle: internship.title,
+        companyName: internship.companyName,
+        paymentSessionId: cfOrder.paymentSessionId,
+      },
+    });
+
+    return describe(payment);
+  }
+
   private cashfreeEnvironment(): "PRODUCTION" | "SANDBOX" {
     return env.CASHFREE_SECRET_KEY.includes("_prod_") || env.CASHFREE_ENV === "PRODUCTION"
       ? "PRODUCTION"
@@ -225,6 +381,32 @@ export class PaymentService {
     try {
       const payment = await paymentRepository.findByOrderId(orderId);
       if (!payment || payment.status !== PaymentStatus.PAID) return;
+
+      // Internship registration fee: one email that confirms the application and the payment.
+      if (payment.application) {
+        const application = payment.application;
+        if (application.status === "WITHDRAWN") {
+          // Paid through an order that was still open after the student withdrew.
+          await AlertService.sendAlert({
+            title: `Registration fee paid for a withdrawn application (${orderId}) — refund it`,
+            severity: "WARNING",
+            event: "PAYMENT_REVIEW_REQUIRED",
+            details: { orderId, applicationId: application.id },
+          }).catch(() => null);
+          return;
+        }
+        await notificationService.sendApplicationFeePaid({
+          studentName: application.fullName,
+          studentEmail: application.email,
+          roleTitle: application.internship.title,
+          companyName: application.internship.companyName,
+          applicationId: application.id,
+          orderId: payment.orderId,
+          amountMinor: payment.amount,
+          currency: payment.currency,
+        });
+        return;
+      }
 
       await notificationService.sendPaymentConfirmed({
         studentName: payment.user.name,
@@ -344,7 +526,6 @@ export class PaymentService {
         paymentId: payment.id,
         orderId: payment.orderId,
         userId: payment.userId,
-        cohortId: payment.cohortId,
         gatewayPaymentId,
         gatewaySignature: signatureHeader,
         eventId,
@@ -366,7 +547,7 @@ export class PaymentService {
       return {
         status: "confirmed",
         paymentId: result.payment.id,
-        enrollmentId: result.enrollment.id,
+        enrollmentId: result.enrollment?.id ?? null,
         invoice,
       };
     }
@@ -462,7 +643,6 @@ export class PaymentService {
         paymentId: payment.id,
         orderId: payment.orderId,
         userId: payment.userId,
-        cohortId: payment.cohortId,
         gatewayPaymentId: paymentIntent.id,
         gatewaySignature: signatureHeader,
         eventId,
@@ -483,7 +663,7 @@ export class PaymentService {
       return {
         status: "confirmed",
         paymentId: result.payment.id,
-        enrollmentId: result.enrollment.id,
+        enrollmentId: result.enrollment?.id ?? null,
         invoice,
       };
     }
@@ -661,7 +841,6 @@ export class PaymentService {
         paymentId: payment.id,
         orderId: payment.orderId,
         userId: payment.userId,
-        cohortId: payment.cohortId,
         gatewayPaymentId: params.gatewayPaymentId,
         gatewaySignature: params.gatewaySignature,
         eventId: params.eventId,
@@ -841,6 +1020,12 @@ export class PaymentService {
             programme: { select: { title: true, slug: true } },
           },
         },
+        application: {
+          select: {
+            id: true,
+            internship: { select: { title: true, companyName: true } },
+          },
+        },
       },
       orderBy: { createdAt: "desc" },
       take: 50,
@@ -854,7 +1039,11 @@ export class PaymentService {
       status: p.status,
       provider: p.provider,
       createdAt: p.createdAt,
-      programmeTitle: p.cohort?.programme?.title || "Training Programme",
+      kind: p.application ? ("INTERNSHIP_FEE" as const) : ("TRAINING" as const),
+      applicationId: p.application?.id ?? null,
+      programmeTitle: p.application
+        ? `Registration fee: ${p.application.internship.title}`
+        : p.cohort?.programme?.title || "Training Programme",
       cohortCode: p.cohort?.cohortCode || null,
     }));
   }
@@ -879,12 +1068,15 @@ export class PaymentService {
       );
     }
 
-    const enrollment = await prisma.enrollment.findFirst({
-      where: {
-        userId: payment.userId,
-        cohortId: payment.cohortId,
-      },
-    });
+    const enrollment = payment.cohortId
+      ? await prisma.enrollment.findFirst({
+          where: {
+            userId: payment.userId,
+            cohortId: payment.cohortId,
+          },
+        })
+      : null;
+    const feeFor = payment.application;
 
     let invoice: ReturnType<typeof generateInvoiceData> | null = null;
     if (payment.status === "PAID") {
@@ -894,8 +1086,12 @@ export class PaymentService {
         gatewayPaymentId: payment.gatewayPaymentId || undefined,
         studentName: payment.user.name,
         studentEmail: payment.user.email,
-        programmeTitle: payment.cohort?.programme?.title || "Training Programme",
-        cohortCode: payment.cohort?.cohortCode || "COHORT",
+        programmeTitle: feeFor
+          ? `Internship registration fee - ${feeFor.internship.title} (${feeFor.internship.companyName})`
+          : payment.cohort?.programme?.title || "Training Programme",
+        cohortCode: feeFor
+          ? `Application ${feeFor.id.slice(-8).toUpperCase()}`
+          : payment.cohort?.cohortCode || "COHORT",
         amount: payment.amount,
         currency: payment.currency,
       });
@@ -908,6 +1104,13 @@ export class PaymentService {
       amount: payment.amount,
       currency: payment.currency,
       provider: payment.provider,
+      kind: feeFor ? ("INTERNSHIP_FEE" as const) : ("TRAINING" as const),
+      itemTitle: feeFor
+        ? feeFor.internship.title
+        : payment.cohort?.programme?.title || "Training Programme",
+      application: feeFor
+        ? { id: feeFor.id, status: feeFor.status, internshipSlug: feeFor.internship.slug }
+        : null,
       enrollment: enrollment
         ? {
             id: enrollment.id,

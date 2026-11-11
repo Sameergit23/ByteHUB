@@ -45,6 +45,13 @@ hosting has no permanent disk.
 - [x] Wrong domains fixed: emails linked to bytehub.dev, share links/sitemap fallback to bytehub.io
 - [x] Only ByteHUB posts internships and training: no company sign-up; admin panel can post/edit
       internships, review applications and resumes, and create/edit programmes and cohorts
+- [x] Internship registration fee: admin chooses Paid/Unpaid stipend and Free/Charge-a-fee when
+      posting; students pay the fee online (Cashfree) when applying; the application reaches the
+      admin only once paid ("Awaiting payment" filter); marking an applicant **Not selected**
+      records a full refund, which admin then sends from the Cashfree dashboard
+- [x] Apply form: phone country code picker; PIN code fills city and state (India Post lookup);
+      area, street address; searchable college list (type your own if missing); GitHub, LinkedIn
+      and the written questions are optional. Fixed: "Continue" on step 3 could skip the review step
 - [ ] Only if you ever add a **free** cohort: a "join for free" endpoint (paid cohorts work; the
       API currently has no direct enrolment for price 0)
 
@@ -73,6 +80,12 @@ hosting has no permanent disk.
       then restart the API on Render. The production database was missing enrolment columns and
       payment/enrolment status values, which broke the admin panel and would break payments
 - [x] Admin panel loads with no error (after the database fix)
+- [ ] **Before pushing the fee + form update:** Supabase SQL Editor: run the database update for
+      migrations `20261111120000_internship_registration_fee` and
+      `20261111130000_application_form_details` (Claude gives the SQL). The new code needs these
+      columns, so run it first, then push
+- [ ] Post an internship with a ₹1 registration fee → apply → pay in the sandbox → application
+      shows as New in Admin → Applications → mark Not selected → refund recorded → refund in Cashfree
 - [ ] Admin posts an internship (Admin → Internships → Post internship) → student applies with resume →
       admin opens the resume and moves the stage (Admin → Applications) → student gets the email
 - [ ] Admin creates a programme and a cohort (Admin → Programmes & cohorts) → it shows on /training

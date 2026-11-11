@@ -83,6 +83,7 @@ const EVENT_LABELS: Record<string, string> = {
   PAYMENT_RATE_LIMITED: "Too many payment attempts",
   ENROLMENT_CONFIRMED: "Enrolment confirmed",
   APPLICATION_SUBMITTED: "Application submitted",
+  APPLICATION_SAVED_AWAITING_FEE: "Application saved, fee not paid yet",
   APPLICATION_STATUS_CHANGED: "Application status changed",
   APPLICATION_WITHDRAWN: "Application withdrawn",
   CONTACT_RATE_LIMITED: "Too many contact-form messages",
@@ -410,6 +411,7 @@ const STATUS_LABELS: Record<string, { label: string; tone: Tone }> = {
   CANCELLED: { label: "Cancelled", tone: "neutral" },
   EXPIRED: { label: "Expired", tone: "neutral" },
   // Applications
+  PENDING_PAYMENT: { label: "Awaiting payment", tone: "amber" },
   SUBMITTED: { label: "New", tone: "blue" },
   UNDER_REVIEW: { label: "In review", tone: "amber" },
   INTERVIEW: { label: "Interview", tone: "violet" },
@@ -861,6 +863,56 @@ export function SelectField<V extends string>({
         ))}
       </select>
     </label>
+  );
+}
+
+/**
+ * A small set of mutually exclusive options shown as a segmented control.
+ * Built from real radio buttons, so it works with the keyboard and screen readers.
+ */
+export function SegmentedChoice<V extends string>({
+  name,
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  name: string;
+  /** Accessible name of the group. */
+  label: string;
+  value: V;
+  options: { value: V; label: string }[];
+  onChange: (value: V) => void;
+}) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label={label}
+      className="inline-flex border border-zinc-300 bg-white"
+    >
+      {options.map((o) => {
+        const checked = o.value === value;
+        return (
+          <label
+            key={o.value}
+            className={cx(
+              "relative inline-flex h-8 cursor-pointer items-center border-r border-zinc-300 px-3 text-xs font-medium transition-colors last:border-r-0 focus-within:ring-2 focus-within:ring-inset focus-within:ring-blue-600",
+              checked ? "bg-zinc-900 text-white" : "text-zinc-700 hover:bg-zinc-50"
+            )}
+          >
+            <input
+              type="radio"
+              name={name}
+              value={o.value}
+              checked={checked}
+              onChange={() => onChange(o.value)}
+              className="sr-only"
+            />
+            {o.label}
+          </label>
+        );
+      })}
+    </div>
   );
 }
 

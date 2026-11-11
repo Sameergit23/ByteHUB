@@ -107,7 +107,9 @@ adminRouter.get(
     ] = await Promise.all([
       prisma.user.count({ where: { deletedAt: null } }),
       prisma.internship.count({ where: { deletedAt: null } }),
-      prisma.application.count({ where: { deletedAt: null } }),
+      prisma.application.count({
+        where: { deletedAt: null, status: { not: "PENDING_PAYMENT" } },
+      }),
       prisma.payment.findMany({
         where: { status: "PAID" },
         select: { amount: true, currency: true },
@@ -227,7 +229,13 @@ adminRouter.get(
         where: whereClause,
         include: {
           company: { select: { name: true, organizationName: true, email: true } },
-          _count: { select: { applications: true } },
+          _count: {
+            select: {
+              applications: {
+                where: { deletedAt: null, status: { not: "PENDING_PAYMENT" } },
+              },
+            },
+          },
         },
         skip: (page - 1) * limit,
         take: limit,
@@ -283,7 +291,9 @@ adminRouter.get(
 
     const where: Prisma.ApplicationWhereInput = {
       deletedAt: null,
-      ...(status ? { status } : {}),
+      // Applications reach the team once their registration fee is paid; the unpaid ones are
+      // only listed when the "Awaiting payment" filter is picked.
+      status: status ?? { not: "PENDING_PAYMENT" },
       ...(internshipId ? { internshipId } : {}),
       ...(search
         ? {
@@ -301,7 +311,25 @@ adminRouter.get(
         where,
         include: {
           internship: {
-            select: { id: true, title: true, companyName: true, slug: true },
+            select: {
+              id: true,
+              title: true,
+              companyName: true,
+              slug: true,
+              registrationFeeAmount: true,
+            },
+          },
+          payments: {
+            where: { status: { in: ["PAID", "REFUNDED", "PARTIALLY_REFUNDED"] } },
+            select: {
+              orderId: true,
+              amount: true,
+              currency: true,
+              status: true,
+              refunds: { select: { amount: true, status: true, createdAt: true } },
+            },
+            orderBy: { createdAt: "desc" },
+            take: 1,
           },
         },
         skip: (page - 1) * limit,
@@ -312,10 +340,26 @@ adminRouter.get(
 
     // The resume itself is opened through /applications/:id/resume (signed, short-lived
     // link), so the stored file path is not sent to the browser.
-    const items = rows.map(({ resumeUrl, studentId: _studentId, ...rest }) => ({
-      ...rest,
-      hasResume: Boolean(resumeUrl),
-    }));
+    const items = rows.map(({ resumeUrl, studentId: _studentId, payments, ...rest }) => {
+      const fee = payments[0];
+      const processed = fee ? fee.refunds.filter((r) => r.status === "PROCESSED") : [];
+      return {
+        ...rest,
+        hasResume: Boolean(resumeUrl),
+        fee: fee
+          ? {
+              orderId: fee.orderId,
+              amount: fee.amount,
+              currency: fee.currency,
+              status: fee.status,
+              refundedAmount: processed.reduce((sum, r) => sum + r.amount, 0),
+              refundedAt: processed.length
+                ? processed[processed.length - 1]!.createdAt
+                : null,
+            }
+          : null,
+      };
+    });
 
     res.status(200).json({
       status: "success",
@@ -703,6 +747,9 @@ adminRouter.get(
           cohort: {
             select: { cohortCode: true, programme: { select: { title: true } } },
           },
+          application: {
+            select: { id: true, internship: { select: { title: true } } },
+          },
           refunds: { select: { amount: true, status: true } },
         },
         skip: (page - 1) * limit,
@@ -720,8 +767,12 @@ adminRouter.get(
       provider: p.provider,
       createdAt: p.createdAt,
       user: p.user,
+      kind: p.application ? "INTERNSHIP_FEE" : "TRAINING",
+      applicationId: p.application?.id ?? null,
       cohortCode: p.cohort?.cohortCode || null,
-      programmeTitle: p.cohort?.programme?.title || null,
+      programmeTitle: p.application
+        ? `Registration fee: ${p.application.internship.title}`
+        : p.cohort?.programme?.title || null,
       refundedAmount: p.refunds
         .filter((r) => r.status === "PROCESSED")
         .reduce((sum, r) => sum + r.amount, 0),

@@ -7,11 +7,13 @@ import { IconApplicant, IconExternal } from "../../../components/admin/icons";
 import type {
   AdminApplication,
   AdminInternship,
+  ApplicationFee,
   ApplicationStatus,
   Envelope,
   Paged,
 } from "../../../components/admin/types";
 import {
+  Badge,
   Button,
   DataTable,
   DescriptionList,
@@ -39,7 +41,7 @@ import {
   useAdminResource,
 } from "../../../components/admin/useAdminResource";
 import { apiFetch, ApiError } from "../../../lib/api";
-import { formatDate } from "../../../lib/format";
+import { formatDate, formatMoney } from "../../../lib/format";
 
 type Filter = ApplicationStatus | "ALL";
 
@@ -52,6 +54,29 @@ const NEXT_STAGES: ApplicationStatus[] = [
   "OFFERED",
   "REJECTED",
 ];
+
+/** Amount of a paid registration fee that has not been refunded yet (0 if none). */
+function refundableFee(fee: ApplicationFee | null): number {
+  if (!fee || fee.status === "REFUNDED") return 0;
+  return Math.max(0, fee.amount - fee.refundedAmount);
+}
+
+function FeeBadge({ application }: { application: AdminApplication }) {
+  const fee = application.fee;
+  if (application.status === "PENDING_PAYMENT")
+    return <Badge tone="amber">Not paid</Badge>;
+  if (!fee) return <span className="text-zinc-500">Free</span>;
+  const amount = formatMoney(fee.amount, fee.currency);
+  if (fee.status === "REFUNDED") return <Badge tone="violet">Refunded {amount}</Badge>;
+  if (fee.status === "PARTIALLY_REFUNDED")
+    return <Badge tone="violet">Partly refunded</Badge>;
+  return <Badge tone="green">Paid {amount}</Badge>;
+}
+
+interface StatusChangeResult {
+  feeRefund?: { amount: number; currency: string; orderId: string } | null;
+  feeRefundError?: string | null;
+}
 
 export default function AdminApplicationsPage() {
   return (
@@ -135,6 +160,13 @@ function ApplicationsView() {
       ),
     },
     {
+      key: "fee",
+      header: "Fee",
+      hideBelow: "lg",
+      className: "whitespace-nowrap",
+      render: (a) => <FeeBadge application={a} />,
+    },
+    {
       key: "applied",
       header: "Applied",
       className: "whitespace-nowrap text-zinc-500",
@@ -186,6 +218,7 @@ function ApplicationsView() {
             { value: "OFFERED", label: "Offered" },
             { value: "REJECTED", label: "Not selected" },
             { value: "WITHDRAWN", label: "Withdrawn" },
+            { value: "PENDING_PAYMENT", label: "Awaiting payment" },
           ]}
         />
         <div className="flex flex-col gap-3 border-b border-zinc-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
@@ -225,9 +258,11 @@ function ApplicationsView() {
                   : "No applications match"
               }
               description={
-                filter === "ALL" && internshipId === "ALL" && !query
-                  ? "When students apply to your internships, they appear here."
-                  : "Try another stage, internship or search."
+                filter === "PENDING_PAYMENT"
+                  ? "Students who saved an application but haven't paid the registration fee show here."
+                  : filter === "ALL" && internshipId === "ALL" && !query
+                    ? "When students apply to your internships, they appear here. Applications with a registration fee appear once the fee is paid."
+                    : "Try another stage, internship or search."
               }
             />
           }
@@ -268,6 +303,10 @@ function ApplicationDrawer({
   onError: (message: string) => void;
 }) {
   const withdrawn = application.status === "WITHDRAWN";
+  const awaitingFee = application.status === "PENDING_PAYMENT";
+  const locked = withdrawn || awaitingFee;
+  const fee = application.fee;
+  const refundable = refundableFee(fee);
   const [stage, setStage] = useState<ApplicationStatus>(
     NEXT_STAGES.includes(application.status) ? application.status : "UNDER_REVIEW"
   );
@@ -280,7 +319,7 @@ function ApplicationDrawer({
     setError(null);
     setSaving(true);
     const result = await runAdminAction(() =>
-      apiFetch(`/applications/${application.id}/status`, {
+      apiFetch<Envelope<StatusChangeResult>>(`/applications/${application.id}/status`, {
         method: "PATCH",
         body: JSON.stringify({
           status: stage,
@@ -293,9 +332,30 @@ function ApplicationDrawer({
       setError(result.message);
       return;
     }
+    const refund = result.value.data?.feeRefund;
+    const refundError = result.value.data?.feeRefundError;
+    const updatedFee: ApplicationFee | null =
+      fee && refund
+        ? {
+            ...fee,
+            status: "REFUNDED",
+            refundedAmount: fee.refundedAmount + refund.amount,
+            refundedAt: new Date().toISOString(),
+          }
+        : fee;
+    const base = `${application.fullName} is now "${statusLabel(stage)}". They were emailed about it.`;
     onUpdated(
-      { ...application, status: stage, feedbackNote: note.trim() || null },
-      `${application.fullName} is now "${statusLabel(stage)}". They were emailed about it.`
+      {
+        ...application,
+        status: stage,
+        feedbackNote: note.trim() || null,
+        fee: updatedFee,
+      },
+      refund
+        ? `${base} Their ${formatMoney(refund.amount, refund.currency)} fee is recorded as refunded: now send it from the Cashfree dashboard (order ${refund.orderId}).`
+        : refundError
+          ? `${base} The fee refund could not be recorded (${refundError}). Record it on the Payments page.`
+          : base
     );
   };
 
@@ -328,8 +388,8 @@ function ApplicationDrawer({
   };
 
   const links: { label: string; href: string }[] = [
-    { label: "GitHub", href: application.githubUrl },
-    { label: "LinkedIn", href: application.linkedinUrl },
+    { label: "GitHub", href: application.githubUrl || "" },
+    { label: "LinkedIn", href: application.linkedinUrl || "" },
     ...(application.portfolioUrl
       ? [{ label: "Portfolio", href: application.portfolioUrl }]
       : []),
@@ -359,9 +419,15 @@ function ApplicationDrawer({
                 ? "Open resume"
                 : "No resume"}
           </Button>
-          {!withdrawn && (
+          {!locked && (
             <Button variant="primary" onClick={save} disabled={saving}>
-              {saving ? "Saving…" : "Save stage"}
+              {saving
+                ? "Saving…"
+                : stage === "REJECTED" &&
+                    refundable > 0 &&
+                    application.status !== "REJECTED"
+                  ? `Save and refund ${formatMoney(refundable, fee?.currency)}`
+                  : "Save stage"}
             </Button>
           )}
         </>
@@ -391,6 +457,20 @@ function ApplicationDrawer({
               </a>
             ),
           },
+          {
+            label: "Address",
+            value:
+              [
+                application.addressLine,
+                application.locality,
+                application.city,
+                application.state,
+                application.pincode,
+                application.country,
+              ]
+                .filter(Boolean)
+                .join(", ") || "—",
+          },
           { label: "College", value: application.collegeOrUniversity },
           {
             label: "Degree",
@@ -401,6 +481,19 @@ function ApplicationDrawer({
             value: `${application.availableHoursPerWeek} hours a week`,
           },
           { label: "Can start", value: formatDate(application.earliestStartDate) },
+          {
+            label: "Registration fee",
+            value: awaitingFee ? (
+              "Not paid yet"
+            ) : fee ? (
+              <span className="flex flex-wrap items-center gap-2">
+                <FeeBadge application={application} />
+                <span className="font-mono text-xs text-zinc-500">{fee.orderId}</span>
+              </span>
+            ) : (
+              "Free to apply"
+            ),
+          },
         ]}
       />
 
@@ -421,19 +514,40 @@ function ApplicationDrawer({
         </div>
       )}
 
-      <Section title="About them">{application.bioSummary}</Section>
-      <Section title="Why this internship">{application.whyInterested}</Section>
-      <Section title="A project they're proud of">
-        {application.relevantProjectDescription}
-      </Section>
+      {application.bioSummary && (
+        <Section title="About them">{application.bioSummary}</Section>
+      )}
+      {application.whyInterested && (
+        <Section title="Why this internship">{application.whyInterested}</Section>
+      )}
+      {application.relevantProjectDescription && (
+        <Section title="A project they're proud of">
+          {application.relevantProjectDescription}
+        </Section>
+      )}
+      {!application.bioSummary &&
+        !application.whyInterested &&
+        !application.relevantProjectDescription && (
+          <p className="text-sm text-zinc-500">
+            The student skipped the optional written questions.
+          </p>
+        )}
 
       <section className="space-y-3 border-t border-zinc-200 pt-5">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
           Stage
         </h3>
-        {withdrawn ? (
+        {awaitingFee ? (
+          <Notice tone="amber" title="Waiting for the registration fee">
+            This student saved an application but hasn&apos;t paid the{" "}
+            {formatMoney(application.internship?.registrationFeeAmount ?? 0, "INR")}{" "}
+            registration fee. It moves to &ldquo;New&rdquo; as soon as they pay.
+          </Notice>
+        ) : withdrawn ? (
           <Notice tone="amber">
             This student withdrew their application, so it can&apos;t be changed.
+            {refundable > 0 &&
+              ` They paid a ${formatMoney(refundable, fee?.currency)} registration fee: refund it from the Payments page if they ask.`}
           </Notice>
         ) : (
           <>
@@ -452,6 +566,16 @@ function ApplicationDrawer({
                 ))}
               </select>
             </Field>
+            {stage === "REJECTED" &&
+              refundable > 0 &&
+              application.status !== "REJECTED" && (
+                <Notice tone="blue" title="The registration fee will be refunded">
+                  Saving records a full refund of {formatMoney(refundable, fee?.currency)}{" "}
+                  and tells the student. Then send the money from the Cashfree dashboard:
+                  Payments, find order <span className="font-mono">{fee?.orderId}</span>,
+                  Refund.
+                </Notice>
+              )}
             <Field
               label="Note for the student (optional)"
               htmlFor="app-note"

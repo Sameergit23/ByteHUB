@@ -44,6 +44,31 @@ export class PaymentController {
   }
 
   /**
+   * POST /api/payments/internship-fee
+   * Starts the checkout for an internship's registration fee. The amount comes from the database.
+   */
+  static async createInternshipFeeIntent(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        throw AppError.unauthorized("Authentication required.");
+      }
+      const applicationId = req.body?.applicationId;
+      if (!applicationId || typeof applicationId !== "string") {
+        throw AppError.badRequest("applicationId is required.");
+      }
+      const data = await paymentService.createApplicationFeeIntent(userId, applicationId);
+      res.status(201).json({ status: "success", data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
    * POST /api/payments/webhooks/cashfree
    * Raw request body verified against x-webhook-signature and x-webhook-timestamp.
    */

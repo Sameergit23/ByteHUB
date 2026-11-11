@@ -63,6 +63,16 @@ export default function TermsPage() {
           you submit. Applications must be your own work and truthful. You can withdraw an
           application from your dashboard while it is still under consideration.
         </p>
+        <p>
+          Some internships have a one-time registration fee, shown on the listing before
+          you apply and paid online through Cashfree Payments. An application with a fee
+          is sent for review only once the fee is paid. If you are not selected, the fee
+          is refunded in full, as set out in our{" "}
+          <Link className="underline" href="/refund-policy">
+            Refund &amp; Cancellation Policy
+          </Link>
+          .
+        </p>
       </LegalSection>
 
       <LegalSection id="companies" title="4. Posting internships">

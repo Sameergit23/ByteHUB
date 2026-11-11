@@ -72,7 +72,7 @@ export default function AdminPaymentsPage() {
     },
     {
       key: "programme",
-      header: "Programme",
+      header: "Paid for",
       hideBelow: "xl",
       render: (p) => (
         <div className="max-w-[14rem]">
@@ -122,7 +122,7 @@ export default function AdminPaymentsPage() {
     <>
       <PageHeader
         title="Payments & refunds"
-        description="Every course payment and its status. Refunds are recorded here and sent from the Cashfree dashboard."
+        description="Every payment: training seats and internship registration fees. Refunds are recorded here and sent from the Cashfree dashboard."
         actions={
           <>
             <ExportButton entity="payments" />

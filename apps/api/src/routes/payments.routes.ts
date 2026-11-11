@@ -37,6 +37,15 @@ paymentsRouter.post(
   PaymentController.createIntent
 );
 
+// Internship registration fee for one of the student's own applications.
+paymentsRouter.post(
+  "/internship-fee",
+  authenticateJWT,
+  requireRoles("STUDENT", "ADMIN"),
+  paymentRateLimiter,
+  PaymentController.createInternshipFeeIntent
+);
+
 paymentsRouter.post(
   "/cashfree/verify-client",
   authenticateJWT,

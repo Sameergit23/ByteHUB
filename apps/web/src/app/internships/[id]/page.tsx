@@ -145,7 +145,20 @@ export default async function InternshipDetailPage({
                   <span className="text-editorial-muted">Stipend</span>
                   <span className="text-ink font-bold">{internship.stipend}</span>
                 </div>
+                <div className="py-3 flex justify-between items-center">
+                  <span className="text-editorial-muted">Registration fee</span>
+                  <span className="text-ink font-bold">{internship.registrationFee}</span>
+                </div>
               </div>
+
+              {internship.registrationFeeAmount > 0 && (
+                <p className="font-sans text-xs text-editorial-muted leading-relaxed">
+                  Paid online when you apply. Refunded in full if you are not selected.{" "}
+                  <Link href="/refund-policy" className="underline underline-offset-4">
+                    Refund policy
+                  </Link>
+                </p>
+              )}
 
               {internship.isOpen ? (
                 <Link href={`/apply/${internship.slug}`} className="block w-full">
@@ -171,6 +184,8 @@ export default async function InternshipDetailPage({
           </div>
           <div className="font-mono text-xs text-editorial-muted">
             {internship.stipend}
+            {internship.registrationFeeAmount > 0 &&
+              ` · Fee ${internship.registrationFee}`}
           </div>
         </div>
         {internship.isOpen ? (

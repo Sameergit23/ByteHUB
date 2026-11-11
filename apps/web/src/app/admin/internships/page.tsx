@@ -41,6 +41,7 @@ import { apiFetch } from "../../../lib/api";
 import {
   formatDate,
   formatDuration,
+  formatRegistrationFee,
   formatStipend,
   formatWorkMode,
 } from "../../../lib/format";
@@ -153,6 +154,20 @@ export default function AdminInternshipsPage() {
           </div>
         );
       },
+    },
+    {
+      key: "fee",
+      header: "Registration fee",
+      className: "whitespace-nowrap tabular-nums",
+      hideBelow: "lg",
+      render: (i) =>
+        i.registrationFeeAmount > 0 ? (
+          <span className="text-zinc-900">
+            {formatRegistrationFee(i.registrationFeeAmount)}
+          </span>
+        ) : (
+          <span className="text-zinc-500">Free</span>
+        ),
     },
     {
       key: "applications",
@@ -366,10 +381,23 @@ function InternshipDetails({ internship }: { internship: AdminInternship }) {
             label: "Stipend",
             value: formatStipend(internship.stipendAmount, internship.currency),
           },
+          {
+            label: "Registration fee",
+            value:
+              internship.registrationFeeAmount > 0
+                ? `${formatRegistrationFee(internship.registrationFeeAmount)} (paid online when applying; refunded if not selected)`
+                : "Free to apply",
+          },
           { label: "Duration", value: formatDuration(internship.durationMonths) },
           { label: "Openings", value: plural(internship.openings, "opening") },
           { label: "Application deadline", value: formatDate(internship.deadline) },
-          { label: "Applicants so far", value: internship._count?.applications ?? 0 },
+          {
+            label: "Applicants so far",
+            value:
+              internship.registrationFeeAmount > 0
+                ? `${internship._count?.applications ?? 0} (paid applications only)`
+                : (internship._count?.applications ?? 0),
+          },
         ]}
       />
 

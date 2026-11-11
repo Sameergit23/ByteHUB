@@ -244,6 +244,9 @@ export default async function InternshipsPage({
 
               <div className="md:col-span-1 font-mono text-xs text-editorial-muted">
                 {item.stipend}
+                {item.registrationFeeAmount > 0 && (
+                  <span className="block">Fee {item.registrationFee}</span>
+                )}
               </div>
 
               {/* Apply Button */}

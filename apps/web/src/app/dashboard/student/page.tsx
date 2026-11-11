@@ -7,9 +7,11 @@ import { apiFetch, ApiError, clearAuth, redirectToLogin } from "../../../lib/api
 import {
   FormAlert,
   describeError,
+  makeAlert,
   successAlert,
   type AlertInfo,
 } from "../../../components/ui/FormAlert";
+import { payInternshipFee } from "../../../lib/cashfree";
 import { PageLoader } from "../../../components/ui/Loader";
 import { formatDate, formatMoney, formatStipend } from "../../../lib/format";
 
@@ -23,6 +25,11 @@ interface ApplicationRow {
   appliedDate: string;
   status: string;
   feedbackNote: string | null;
+  /** Registration fee for the internship, in paise (0 = free to apply). */
+  feeAmount: number;
+  /** What happened to the fee the student paid: PAID, REFUNDED, PARTIALLY_REFUNDED. */
+  feeStatus: string | null;
+  feePaidAmount: number;
 }
 
 interface EnrollmentRow {
@@ -146,6 +153,9 @@ export default function StudentDashboardPage() {
           appliedDate: formatDate(a.createdAt),
           status: a.status,
           feedbackNote: a.feedbackNote || null,
+          feeAmount: a.internship?.registrationFeeAmount ?? 0,
+          feeStatus: a.payments?.[0]?.status ?? null,
+          feePaidAmount: a.payments?.[0]?.amount ?? 0,
         }))
       );
 
@@ -194,6 +204,7 @@ export default function StudentDashboardPage() {
   const openApplications = applications.filter(
     (a) => !CLOSED_APPLICATION_STATES.has(a.status)
   );
+  const unpaidApplications = applications.filter((a) => a.status === "PENDING_PAYMENT");
   const currentTrack = activeEnrollments[0] || null;
 
   const navItems: NavItem[] = [
@@ -213,8 +224,58 @@ export default function StudentDashboardPage() {
     { id: "profile", label: "Profile & Settings" },
   ];
 
+  const handlePayFee = async (appId: string) => {
+    setBusyId(appId);
+    setNotice(null);
+    try {
+      const result = await payInternshipFee(appId);
+      if (result.outcome === "paid") {
+        setNotice(
+          successAlert(
+            "Payment received. Your application is now with our team and a receipt is on its way to your email."
+          )
+        );
+        await load();
+      } else if (result.outcome === "no_fee_needed") {
+        setNotice(
+          successAlert(
+            "This internship no longer has a fee, so your application was sent."
+          )
+        );
+        await load();
+      } else {
+        setNotice(
+          makeAlert(
+            "payment",
+            "Payment not completed",
+            `${result.reason ? `${result.reason}. ` : ""}No money was taken. You can try again any time before the deadline.`
+          )
+        );
+      }
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        redirectToLogin();
+        return;
+      }
+      setNotice(
+        describeError(err, "The payment could not be started. Please try again.")
+      );
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const handleWithdraw = async (appId: string) => {
-    if (!confirm("Are you sure you want to withdraw this application?")) return;
+    const app = applications.find((a) => a.id === appId);
+    const paidFee = app?.feeStatus === "PAID";
+    if (
+      !confirm(
+        paidFee
+          ? "Are you sure you want to withdraw this application? The registration fee is not refunded automatically when you withdraw; contact us if you want to request a refund."
+          : "Are you sure you want to withdraw this application?"
+      )
+    )
+      return;
     setBusyId(appId);
     setNotice(null);
     try {
@@ -281,6 +342,12 @@ export default function StudentDashboardPage() {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
+      case "PENDING_PAYMENT":
+        return (
+          <span className="inline-block px-2 py-0.5 border border-[#B8341A] text-[11px] font-mono text-[#B8341A] font-bold">
+            AWAITING PAYMENT
+          </span>
+        );
       case "SUBMITTED":
         return (
           <span className="inline-block px-2 py-0.5 border border-[#D8D3C4] text-[11px] font-mono text-[#5A574D]">
@@ -499,6 +566,27 @@ export default function StudentDashboardPage() {
             )
           )}
 
+          {unpaidApplications.length > 0 && (
+            <div className="border border-[#B8341A] bg-[#FAF8F3] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <p className="text-sm text-[#16150F]">
+                <strong>
+                  {unpaidApplications.length === 1
+                    ? "1 application is"
+                    : `${unpaidApplications.length} applications are`}{" "}
+                  waiting for the registration fee.
+                </strong>{" "}
+                Applications reach our team once the fee is paid.
+              </p>
+              <button
+                type="button"
+                onClick={() => setActiveTab("applications")}
+                className="self-start sm:self-auto px-4 py-2 bg-[#16150F] text-[#F5F2EA] text-xs font-mono hover:bg-[#B8341A] transition-colors"
+              >
+                Pay now →
+              </button>
+            </div>
+          )}
+
           {/* Recent Applications Stacked Table */}
           <div className="space-y-4">
             <div className="flex justify-between items-center">
@@ -585,9 +673,40 @@ export default function StudentDashboardPage() {
                       <div>{getStatusBadge(app.status)}</div>
                     </div>
 
+                    {app.status === "PENDING_PAYMENT" && (
+                      <div className="border border-[#B8341A] p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <p className="text-xs text-[#16150F]">
+                          Pay the {formatMoney(app.feeAmount, "INR")} registration fee to
+                          send this application to our team. Refunded in full if you are
+                          not selected.
+                        </p>
+                        <button
+                          type="button"
+                          disabled={busyId === app.id}
+                          onClick={() => handlePayFee(app.id)}
+                          className="self-start sm:self-auto px-4 py-2 bg-[#B8341A] text-white text-xs font-mono font-bold hover:bg-[#16150F] transition-colors disabled:opacity-50"
+                        >
+                          {busyId === app.id
+                            ? "Waiting for payment..."
+                            : `Pay ${formatMoney(app.feeAmount, "INR")}`}
+                        </button>
+                      </div>
+                    )}
+
+                    {app.feeStatus && (
+                      <p className="text-xs font-mono text-[#5A574D]">
+                        Registration fee {formatMoney(app.feePaidAmount, "INR")}:{" "}
+                        {app.feeStatus === "PAID"
+                          ? "paid"
+                          : app.feeStatus === "REFUNDED"
+                            ? "refunded in full (allow 5 to 7 working days to reach your account)"
+                            : "partly refunded"}
+                      </p>
+                    )}
+
                     {app.feedbackNote && (
                       <p className="text-xs text-[#16150F] border-l-2 border-[#16150F] pl-3">
-                        Note from the company: {app.feedbackNote}
+                        Note from ByteHUB: {app.feedbackNote}
                       </p>
                     )}
 
@@ -699,7 +818,7 @@ export default function StudentDashboardPage() {
         <div className="space-y-6">
           {payments.length === 0 ? (
             emptyState(
-              "No payments yet. Receipts appear here after you enrol in a programme."
+              "No payments yet. Receipts appear here after you pay for a programme or an internship registration fee."
             )
           ) : (
             <div className="border border-[#D8D3C4] bg-[#FAF8F3] divide-y divide-[#D8D3C4]">

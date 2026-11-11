@@ -3,6 +3,7 @@ import {
   formatDate,
   formatDuration,
   formatMoney,
+  formatRegistrationFee,
   formatStipend,
   formatWorkMode,
 } from "./format";
@@ -32,6 +33,10 @@ export interface InternshipItem {
   typeCode: string;
   track: string;
   stipend: string;
+  /** Paid online when applying, in paise. 0 = free to apply. */
+  registrationFeeAmount: number;
+  /** Display label: "₹499" or "Free to apply" */
+  registrationFee: string;
   duration: string;
   durationMonths: number;
   deadline: string;
@@ -125,6 +130,8 @@ function toInternshipItem(raw: any): InternshipItem {
     typeCode: raw.type,
     track: raw.track?.name || "General",
     stipend: formatStipend(raw.stipendAmount ?? 0, raw.currency),
+    registrationFeeAmount: raw.registrationFeeAmount ?? 0,
+    registrationFee: formatRegistrationFee(raw.registrationFeeAmount ?? 0),
     duration: formatDuration(raw.durationMonths ?? 0),
     durationMonths: raw.durationMonths ?? 0,
     deadline: formatDate(raw.deadline),

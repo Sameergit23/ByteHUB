@@ -144,6 +144,7 @@ export class InternshipService {
         location: input.location,
         type: input.type,
         stipendAmount: input.stipend * 100, // stored in paise
+        registrationFeeAmount: (input.registrationFee ?? 0) * 100, // paise; 0 = free to apply
         currency: input.currency,
         durationMonths: input.durationMonths,
         description: input.description,
@@ -178,10 +179,13 @@ export class InternshipService {
       );
     }
 
-    const { stipend, deadline, ...rest } = input;
+    const { stipend, registrationFee, deadline, ...rest } = input;
     const data: Prisma.InternshipUncheckedUpdateInput = {
       ...rest,
       ...(stipend !== undefined ? { stipendAmount: stipend * 100 } : {}),
+      ...(registrationFee !== undefined
+        ? { registrationFeeAmount: registrationFee * 100 }
+        : {}),
       ...(deadline ? { deadline: new Date(deadline) } : {}),
     };
 

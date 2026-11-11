@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { Stepper } from "../../../components/ui/Stepper";
 import { Button } from "../../../components/ui/Button";
@@ -9,6 +9,15 @@ import { Input } from "../../../components/ui/Input";
 import { Select } from "../../../components/ui/Select";
 import { Textarea } from "../../../components/ui/Textarea";
 import { Checkbox } from "../../../components/ui/Checkbox";
+import { Combobox } from "../../../components/ui/Combobox";
+import { COLLEGES } from "../../../lib/colleges";
+import {
+  COUNTRIES,
+  findCountry,
+  fullPhone,
+  phoneProblem,
+  splitPhone,
+} from "../../../lib/countries";
 import { ColophonFooter } from "../../../components/layout/ColophonFooter";
 import type { InternshipItem } from "../../../lib/catalog";
 import {
@@ -17,7 +26,10 @@ import {
   ApiError,
   ApiEnvelope,
   StoredUser,
+  redirectToLogin,
 } from "../../../lib/api";
+import { payInternshipFee } from "../../../lib/cashfree";
+import { formatMoney } from "../../../lib/format";
 import {
   FormAlert,
   describeError,
@@ -51,8 +63,14 @@ export function ApplyForm({ internship }: { internship: InternshipItem }) {
     // Step 1: Details
     fullName: "",
     email: "",
-    phone: "",
-    location: "Bengaluru, India",
+    phoneCountry: "IN",
+    phoneNumber: "",
+    country: "India",
+    pincode: "",
+    locality: "",
+    city: "",
+    state: "",
+    addressLine: "",
 
     // Step 2: Education
     collegeOrUniversity: "",
@@ -89,6 +107,19 @@ export function ApplyForm({ internship }: { internship: InternshipItem }) {
     submittedAt: string;
   } | null>(null);
 
+  // Registration fee: the application is saved first, then paid for through Cashfree.
+  const feeAmount = internship.registrationFeeAmount;
+  const hasFee = feeAmount > 0;
+  const feeLabel = formatMoney(feeAmount, "INR");
+  const [feeDue, setFeeDue] = useState<{ id: string; createdAt?: string } | null>(null);
+  const [isPaying, setIsPaying] = useState(false);
+  const [feeAlert, setFeeAlert] = useState<AlertInfo | null>(null);
+  const [paidFee, setPaidFee] = useState<{
+    orderId: string;
+    amount: number;
+    currency: string;
+  } | null>(null);
+
   // Restore draft and prefill logged in user info
   useEffect(() => {
     const user = getStoredUser();
@@ -97,8 +128,18 @@ export function ApplyForm({ internship }: { internship: InternshipItem }) {
 
     if (savedDraft) {
       try {
-        const parsed = JSON.parse(savedDraft);
-        setFormData(parsed);
+        // Drafts saved by the older form had a single phone and location line.
+        const { phone, location, ...parsed } = JSON.parse(savedDraft);
+        const oldPhone =
+          typeof phone === "string" && !parsed.phoneNumber ? splitPhone(phone) : null;
+        setFormData((prev) => ({
+          ...prev,
+          ...parsed,
+          ...(oldPhone
+            ? { phoneCountry: oldPhone.iso, phoneNumber: oldPhone.number }
+            : {}),
+          ...(typeof location === "string" && !parsed.city ? { city: location } : {}),
+        }));
         setLastAutosaved(new Date().toLocaleTimeString());
       } catch {
         // Ignore JSON error
@@ -111,6 +152,70 @@ export function ApplyForm({ internship }: { internship: InternshipItem }) {
       }));
     }
   }, [draftKey]);
+
+  // PIN code lookup: a valid Indian PIN fills in city and state and lists the areas it covers.
+  const [pinLookup, setPinLookup] = useState<{
+    status: "idle" | "loading" | "found" | "not_found" | "error";
+    localities: string[];
+    place?: string;
+  }>({ status: "idle", localities: [] });
+  const lastPin = useRef("");
+
+  useEffect(() => {
+    const pin = formData.pincode.trim();
+    if (formData.country !== "India" || !/^[1-9][0-9]{5}$/.test(pin)) {
+      lastPin.current = "";
+      setPinLookup({ status: "idle", localities: [] });
+      return;
+    }
+    if (pin === lastPin.current) return;
+    lastPin.current = pin;
+    let cancelled = false;
+    setPinLookup({ status: "loading", localities: [] });
+    const timer = window.setTimeout(() => {
+      apiFetch<ApiEnvelope<{ city: string; state: string; localities: string[] }>>(
+        `/meta/pincode/${pin}`
+      )
+        .then((res) => {
+          if (cancelled || !res.data) return;
+          const { city, state, localities } = res.data;
+          setPinLookup({ status: "found", localities, place: `${city}, ${state}` });
+          setFormData((prev) => {
+            const keepLocality = localities.includes(prev.locality);
+            const updated = {
+              ...prev,
+              city: city || prev.city,
+              state: state || prev.state,
+              locality: keepLocality
+                ? prev.locality
+                : localities.length === 1
+                  ? localities[0]!
+                  : "",
+            };
+            sessionStorage.setItem(draftKey, JSON.stringify(updated));
+            return updated;
+          });
+          setErrors((prev) => {
+            const next = { ...prev };
+            delete next.city;
+            delete next.state;
+            delete next.pincode;
+            return next;
+          });
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          setPinLookup({
+            status: err instanceof ApiError && err.status === 404 ? "not_found" : "error",
+            localities: [],
+          });
+        });
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [formData.pincode, formData.country, draftKey]);
 
   // Uploading and submitting need a signed-in student; the draft survives the round trip.
   const goToLogin = () => {
@@ -236,9 +341,42 @@ export function ApplyForm({ internship }: { internship: InternshipItem }) {
       result = ApplicationDetailsSchema.safeParse({
         fullName: formData.fullName,
         email: formData.email,
-        phone: formData.phone,
-        location: formData.location,
+        phone: fullPhone(formData.phoneCountry, formData.phoneNumber),
+        country: formData.country,
+        pincode: formData.pincode,
+        addressLine: formData.addressLine,
+        locality: formData.locality,
+        city: formData.city,
+        state: formData.state,
       });
+      // Checks the shared rules can't express: phone length per country, PIN, city and state.
+      const extra: Record<string, string> = {};
+      const phoneIssue = phoneProblem(formData.phoneCountry, formData.phoneNumber);
+      if (phoneIssue) extra.phone = phoneIssue;
+      if (
+        formData.country === "India" &&
+        !/^[1-9][0-9]{5}$/.test(formData.pincode.trim())
+      ) {
+        extra.pincode = "Enter your 6-digit PIN code.";
+      }
+      if (formData.city.trim().length < 2) extra.city = "Enter your city or town.";
+      if (formData.state.trim().length < 2) {
+        extra.state =
+          formData.country === "India"
+            ? "Enter your state."
+            : "Enter your state or region.";
+      }
+      if (Object.keys(extra).length) {
+        const fieldErrors: Record<string, string> = { ...extra };
+        if (!result.success) {
+          result.error.issues.forEach((issue) => {
+            const key = issue.path[0] as string;
+            if (key && !fieldErrors[key]) fieldErrors[key] = issue.message;
+          });
+        }
+        setErrors(fieldErrors);
+        return false;
+      }
     } else if (currentStep === 1) {
       result = ApplicationEducationSchema.safeParse({
         collegeOrUniversity: formData.collegeOrUniversity,
@@ -290,6 +428,60 @@ export function ApplyForm({ internship }: { internship: InternshipItem }) {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  const showSubmitted = (application: { id: string; createdAt?: string }) => {
+    setSubmittedApp({
+      id: application.id,
+      referenceCode: `BH-${String(application.id).slice(0, 8).toUpperCase()}`,
+      submittedAt: new Date(application.createdAt || Date.now()).toLocaleDateString(
+        "en-US",
+        {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        }
+      ),
+    });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const startFeePayment = async (application: { id: string; createdAt?: string }) => {
+    setIsPaying(true);
+    setFeeAlert(null);
+    try {
+      const result = await payInternshipFee(application.id);
+      if (result.outcome === "paid") {
+        setPaidFee({
+          orderId: result.orderId,
+          amount: result.amount,
+          currency: result.currency,
+        });
+        setFeeDue(null);
+        showSubmitted(application);
+      } else if (result.outcome === "no_fee_needed") {
+        setFeeDue(null);
+        showSubmitted(application);
+      } else {
+        setFeeAlert(
+          makeAlert(
+            "payment",
+            "Payment not completed",
+            `${result.reason ? `${result.reason}. ` : ""}No money was taken. Your application is saved: pay whenever you're ready, here or from your dashboard.`
+          )
+        );
+      }
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        redirectToLogin("/dashboard/student");
+        return;
+      }
+      setFeeAlert(
+        describeError(err, "The payment could not be started. Please try again.")
+      );
+    } finally {
+      setIsPaying(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateCurrentStep()) return;
@@ -315,16 +507,31 @@ export function ApplyForm({ internship }: { internship: InternshipItem }) {
 
     try {
       // The API rejects unknown fields, so only the application fields themselves are sent.
-      const { resumeFileName: _resumeFileName, ...applicationFields } = formData;
+      const {
+        resumeFileName: _resumeFileName,
+        phoneCountry,
+        phoneNumber,
+        ...applicationFields
+      } = formData;
       const payload = {
         internshipId: internship.id,
         ...applicationFields,
+        phone: fullPhone(phoneCountry, phoneNumber),
+        location: [
+          applicationFields.city,
+          applicationFields.state || applicationFields.country,
+        ]
+          .filter(Boolean)
+          .join(", "),
         graduationYear: Number(applicationFields.graduationYear),
         availableHoursPerWeek: Number(applicationFields.availableHoursPerWeek),
       };
 
       const res = await apiFetch<
-        ApiEnvelope<{ application?: { id: string; createdAt?: string } }>
+        ApiEnvelope<{
+          application?: { id: string; createdAt?: string };
+          paymentRequired?: boolean;
+        }>
       >("/applications", {
         method: "POST",
         body: JSON.stringify(payload),
@@ -338,19 +545,15 @@ export function ApplyForm({ internship }: { internship: InternshipItem }) {
       // Clear draft only once the server has stored the application
       sessionStorage.removeItem(draftKey);
 
-      setSubmittedApp({
-        id: application.id,
-        referenceCode: `BH-${String(application.id).slice(0, 8).toUpperCase()}`,
-        submittedAt: new Date(application.createdAt || Date.now()).toLocaleDateString(
-          "en-US",
-          {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-          }
-        ),
-      });
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      if (res.data?.paymentRequired) {
+        // Saved, but it only reaches the team once the registration fee is paid.
+        setFeeDue({ id: application.id, createdAt: application.createdAt });
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        await startFeePayment(application);
+        return;
+      }
+
+      showSubmitted(application);
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         goToLogin();
@@ -405,6 +608,9 @@ export function ApplyForm({ internship }: { internship: InternshipItem }) {
           <div className="flex flex-col sm:items-end text-xs font-mono">
             <span className="font-bold text-ink">{internship.stipend}</span>
             <span className="text-editorial-muted">Duration: {internship.duration}</span>
+            {hasFee && (
+              <span className="text-editorial-muted">Registration fee: {feeLabel}</span>
+            )}
             {lastAutosaved && (
               <span className="text-[11px] text-green-700 pt-1">
                 ✓ Draft autosaved at {lastAutosaved}
@@ -445,11 +651,27 @@ export function ApplyForm({ internship }: { internship: InternshipItem }) {
                   <span className="text-editorial-muted">Submission Date</span>
                   <span className="text-ink font-bold">{submittedApp.submittedAt}</span>
                 </div>
+                {paidFee && (
+                  <div className="py-2 flex justify-between gap-4">
+                    <span className="text-editorial-muted">Registration fee</span>
+                    <span className="text-ink font-bold text-right">
+                      {formatMoney(paidFee.amount, paidFee.currency)} paid ·{" "}
+                      {paidFee.orderId}
+                    </span>
+                  </div>
+                )}
                 <div className="py-2 flex justify-between">
                   <span className="text-editorial-muted">Current Status</span>
                   <span className="text-accent font-bold">SUBMITTED (Under Review)</span>
                 </div>
               </div>
+
+              {paidFee && (
+                <p className="font-sans text-xs text-editorial-muted">
+                  A receipt is on its way to your email. If you are not selected, the fee
+                  is refunded in full.
+                </p>
+              )}
 
               <div className="pt-4 flex flex-col sm:flex-row justify-center gap-4">
                 <Link href="/dashboard/student">
@@ -463,6 +685,65 @@ export function ApplyForm({ internship }: { internship: InternshipItem }) {
                   </Button>
                 </Link>
               </div>
+            </div>
+          ) : feeDue ? (
+            <div className="space-y-8 py-8 text-center max-w-xl mx-auto animate-fadeIn">
+              <div className="inline-block border border-accent text-accent px-3 py-1 font-mono text-xs font-bold uppercase tracking-wider">
+                Last step: registration fee
+              </div>
+
+              <div className="space-y-3">
+                <h2 className="font-heading text-3xl sm:text-4xl font-bold text-ink">
+                  Pay {feeLabel} to send your application.
+                </h2>
+                <p className="font-sans text-sm text-editorial-muted leading-relaxed">
+                  Your application for <strong>{internship.title}</strong> is saved. It
+                  goes to our review team as soon as the registration fee is paid.
+                </p>
+              </div>
+
+              <FormAlert alert={feeAlert} onDismiss={() => setFeeAlert(null)} />
+
+              <div className="p-4 border border-editorial-border bg-canvas font-mono text-xs text-left divide-y divide-editorial-line">
+                <div className="py-2 flex justify-between gap-4">
+                  <span className="text-editorial-muted">Registration fee</span>
+                  <span className="text-ink font-bold">{feeLabel}</span>
+                </div>
+                <div className="py-2 flex justify-between gap-4">
+                  <span className="text-editorial-muted">Pay with</span>
+                  <span className="text-ink font-bold text-right">
+                    UPI, cards or netbanking (Cashfree)
+                  </span>
+                </div>
+                <div className="py-2 flex justify-between gap-4">
+                  <span className="text-editorial-muted">If you are not selected</span>
+                  <span className="text-ink font-bold">Full refund</span>
+                </div>
+              </div>
+
+              <div className="pt-2 flex flex-col sm:flex-row justify-center gap-4">
+                <Button
+                  variant="primary"
+                  size="lg"
+                  isLoading={isPaying}
+                  onClick={() => startFeePayment(feeDue)}
+                >
+                  {isPaying ? "Waiting for payment…" : `Pay ${feeLabel} securely`}
+                </Button>
+                <Link href="/dashboard/student">
+                  <Button variant="outline" size="lg" disabled={isPaying}>
+                    Pay later from dashboard
+                  </Button>
+                </Link>
+              </div>
+
+              <p className="font-sans text-xs text-editorial-muted">
+                By paying you agree to our{" "}
+                <Link href="/refund-policy" target="_blank" className="underline">
+                  Refund Policy
+                </Link>
+                .
+              </p>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-6">
@@ -517,25 +798,158 @@ export function ApplyForm({ internship }: { internship: InternshipItem }) {
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                    <Input
-                      label="Phone Number (with country code)"
-                      required
-                      placeholder="+91 9876543210"
-                      value={formData.phone}
-                      error={errors.phone}
-                      onChange={(e) => handleFieldChange("phone", e.target.value)}
-                    />
+                  {/* Phone: country code + number */}
+                  <div className="space-y-1.5">
+                    <label
+                      htmlFor="phone-number"
+                      className="block text-xs font-sans font-medium text-ink"
+                    >
+                      Mobile number
+                      <span className="text-accent ml-1" aria-hidden="true">
+                        *
+                      </span>
+                    </label>
+                    {errors.phone && (
+                      <p className="text-[11px] text-accent font-medium" role="alert">
+                        {errors.phone}
+                      </p>
+                    )}
+                    <div className="flex">
+                      <select
+                        aria-label="Country code"
+                        value={formData.phoneCountry}
+                        onChange={(e) =>
+                          handleFieldChange("phoneCountry", e.target.value)
+                        }
+                        className="min-h-[44px] w-[7.5rem] shrink-0 border border-r-0 border-editorial-border bg-canvas px-2 text-sm text-ink hover:border-ink focus-visible:outline-2 focus-visible:outline-ink"
+                      >
+                        {COUNTRIES.map((c) => (
+                          <option key={c.iso} value={c.iso}>
+                            {c.iso} {c.dial}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        id="phone-number"
+                        type="tel"
+                        inputMode="tel"
+                        autoComplete="tel-national"
+                        placeholder={
+                          formData.phoneCountry === "IN" ? "98765 43210" : "Phone number"
+                        }
+                        value={formData.phoneNumber}
+                        aria-invalid={Boolean(errors.phone)}
+                        onChange={(e) => handleFieldChange("phoneNumber", e.target.value)}
+                        className={`min-h-[44px] w-full min-w-0 border bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-editorial-muted/70 focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-1 ${
+                          errors.phone
+                            ? "border-accent"
+                            : "border-editorial-border hover:border-ink focus-visible:border-ink"
+                        }`}
+                      />
+                    </div>
+                    <p className="text-[11px] text-editorial-muted">
+                      {findCountry(formData.phoneCountry).name} (
+                      {findCountry(formData.phoneCountry).dial}). We only call about this
+                      application.
+                    </p>
+                  </div>
+
+                  {/* Address */}
+                  <fieldset className="space-y-4 border border-editorial-border p-4 sm:p-5">
+                    <legend className="px-1 text-xs font-sans font-semibold text-ink">
+                      Where you live
+                    </legend>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <Select
+                        label="Country"
+                        required
+                        value={formData.country}
+                        onChange={(e) => handleFieldChange("country", e.target.value)}
+                        options={COUNTRIES.map((c) => ({ value: c.name, label: c.name }))}
+                      />
+                      <Input
+                        label={
+                          formData.country === "India"
+                            ? "PIN code"
+                            : "Postal code (optional)"
+                        }
+                        required={formData.country === "India"}
+                        inputMode={formData.country === "India" ? "numeric" : "text"}
+                        maxLength={formData.country === "India" ? 6 : 10}
+                        autoComplete="postal-code"
+                        placeholder={formData.country === "India" ? "e.g. 452001" : ""}
+                        value={formData.pincode}
+                        error={errors.pincode}
+                        helperText={
+                          formData.country !== "India"
+                            ? undefined
+                            : pinLookup.status === "loading"
+                              ? "Looking up your PIN code…"
+                              : pinLookup.status === "found"
+                                ? `Found: ${pinLookup.place}`
+                                : pinLookup.status === "not_found"
+                                  ? "We couldn't find this PIN code. Check it, or type your city and state below."
+                                  : pinLookup.status === "error"
+                                    ? "PIN lookup isn't available right now. Type your city and state below."
+                                    : "We fill in your city and state from it."
+                        }
+                        onChange={(e) =>
+                          handleFieldChange(
+                            "pincode",
+                            formData.country === "India"
+                              ? e.target.value.replace(/[^0-9]/g, "")
+                              : e.target.value
+                          )
+                        }
+                      />
+                    </div>
+
+                    {formData.country === "India" && pinLookup.localities.length > 1 ? (
+                      <Select
+                        label="Area / locality (optional)"
+                        value={formData.locality}
+                        onChange={(e) => handleFieldChange("locality", e.target.value)}
+                        options={[
+                          { value: "", label: "Choose your area" },
+                          ...pinLookup.localities.map((l) => ({ value: l, label: l })),
+                        ]}
+                      />
+                    ) : (
+                      <Input
+                        label="Area / locality (optional)"
+                        placeholder="e.g. Vijay Nagar"
+                        value={formData.locality}
+                        onChange={(e) => handleFieldChange("locality", e.target.value)}
+                      />
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <Input
+                        label="City / town"
+                        required
+                        autoComplete="address-level2"
+                        value={formData.city}
+                        error={errors.city}
+                        onChange={(e) => handleFieldChange("city", e.target.value)}
+                      />
+                      <Input
+                        label={formData.country === "India" ? "State" : "State / region"}
+                        required
+                        autoComplete="address-level1"
+                        value={formData.state}
+                        error={errors.state}
+                        onChange={(e) => handleFieldChange("state", e.target.value)}
+                      />
+                    </div>
 
                     <Input
-                      label="Current City / Residence"
-                      required
-                      placeholder="e.g. Bengaluru, India"
-                      value={formData.location}
-                      error={errors.location}
-                      onChange={(e) => handleFieldChange("location", e.target.value)}
+                      label="House / street address (optional)"
+                      autoComplete="street-address"
+                      placeholder="e.g. 12, Scheme No. 54, AB Road"
+                      value={formData.addressLine}
+                      onChange={(e) => handleFieldChange("addressLine", e.target.value)}
                     />
-                  </div>
+                  </fieldset>
                 </div>
               )}
 
@@ -554,14 +968,16 @@ export function ApplyForm({ internship }: { internship: InternshipItem }) {
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                     <div className="sm:col-span-2">
-                      <Input
-                        label="College / University Name"
+                      <Combobox
+                        label="College / University"
                         required
-                        placeholder="e.g. Indian Institute of Technology, Bombay"
+                        placeholder="Start typing, e.g. SGSITS or IIT"
+                        helperText="Pick from the list, or type your college if it isn't there."
+                        options={COLLEGES}
                         value={formData.collegeOrUniversity}
                         error={errors.collegeOrUniversity}
-                        onChange={(e) =>
-                          handleFieldChange("collegeOrUniversity", e.target.value)
+                        onChange={(value) =>
+                          handleFieldChange("collegeOrUniversity", value)
                         }
                       />
                     </div>
@@ -593,8 +1009,7 @@ export function ApplyForm({ internship }: { internship: InternshipItem }) {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                     <Input
-                      label="GitHub Profile URL"
-                      required
+                      label="GitHub profile (optional)"
                       placeholder="https://github.com/username"
                       value={formData.githubUrl}
                       error={errors.githubUrl}
@@ -602,8 +1017,7 @@ export function ApplyForm({ internship }: { internship: InternshipItem }) {
                     />
 
                     <Input
-                      label="LinkedIn Profile URL"
-                      required
+                      label="LinkedIn profile (optional)"
                       placeholder="https://linkedin.com/in/username"
                       value={formData.linkedinUrl}
                       error={errors.linkedinUrl}
@@ -669,9 +1083,13 @@ export function ApplyForm({ internship }: { internship: InternshipItem }) {
                     )}
                   </div>
 
+                  <p className="font-sans text-xs text-editorial-muted">
+                    The questions below are optional, but a few lines help us understand
+                    you better.
+                  </p>
+
                   <Textarea
-                    label="Brief Bio Summary (20 - 800 characters)"
-                    required
+                    label="Brief bio (optional)"
                     rows={3}
                     placeholder="Provide a concise introduction to your background, technical interests, and preferred stack..."
                     value={formData.bioSummary}
@@ -680,8 +1098,7 @@ export function ApplyForm({ internship }: { internship: InternshipItem }) {
                   />
 
                   <Textarea
-                    label="Why are you interested in this internship? (min 30 characters)"
-                    required
+                    label="Why are you interested in this internship? (optional)"
                     rows={3}
                     placeholder="Explain what motivates you about this role, company project, and team mentorship..."
                     value={formData.whyInterested}
@@ -690,8 +1107,7 @@ export function ApplyForm({ internship }: { internship: InternshipItem }) {
                   />
 
                   <Textarea
-                    label="Describe a technical project you built (min 50 characters)"
-                    required
+                    label="A project you built (optional)"
                     rows={4}
                     placeholder="Walk us through architecture decisions, concurrency or state challenges, performance trade-offs, and test coverage..."
                     value={formData.relevantProjectDescription}
@@ -758,6 +1174,25 @@ export function ApplyForm({ internship }: { internship: InternshipItem }) {
                         <strong>Email:</strong> {formData.email || "—"}
                       </div>
                       <div>
+                        <strong>Phone:</strong>{" "}
+                        {formData.phoneNumber
+                          ? fullPhone(formData.phoneCountry, formData.phoneNumber)
+                          : "—"}
+                      </div>
+                      <div>
+                        <strong>Address:</strong>{" "}
+                        {[
+                          formData.addressLine,
+                          formData.locality,
+                          formData.city,
+                          formData.state,
+                          formData.pincode,
+                          formData.country,
+                        ]
+                          .filter(Boolean)
+                          .join(", ") || "—"}
+                      </div>
+                      <div>
                         <strong>College:</strong> {formData.collegeOrUniversity || "—"}
                       </div>
                       <div>
@@ -771,6 +1206,15 @@ export function ApplyForm({ internship }: { internship: InternshipItem }) {
                       </div>
                     </div>
                   </div>
+
+                  {hasFee && (
+                    <div className="p-4 border border-accent/40 bg-accent/5 font-sans text-xs text-ink leading-relaxed">
+                      <strong>This internship has a {feeLabel} registration fee.</strong>{" "}
+                      After you submit, you pay it securely with Cashfree (UPI, cards or
+                      netbanking). Your application reaches our team once it is paid, and
+                      the fee is refunded in full if you are not selected.
+                    </div>
+                  )}
 
                   <div className="space-y-3 pt-2">
                     <Checkbox
@@ -821,18 +1265,30 @@ export function ApplyForm({ internship }: { internship: InternshipItem }) {
                   <div></div>
                 )}
 
+                {/* Separate keys give each its own button element. Otherwise React turns the
+                    clicked "Continue" into the submit button mid-click on step 3, and the
+                    browser submits the form before the student sees the review step. */}
                 {currentStep < 3 ? (
-                  <Button type="button" variant="primary" size="md" onClick={handleNext}>
+                  <Button
+                    key="next"
+                    type="button"
+                    variant="primary"
+                    size="md"
+                    onClick={handleNext}
+                  >
                     Continue to next step →
                   </Button>
                 ) : (
                   <Button
+                    key="submit"
                     type="submit"
                     variant="primary"
                     size="lg"
                     isLoading={isSubmitting}
                   >
-                    Submit official application
+                    {hasFee
+                      ? `Submit and pay ${feeLabel}`
+                      : "Submit official application"}
                   </Button>
                 )}
               </div>

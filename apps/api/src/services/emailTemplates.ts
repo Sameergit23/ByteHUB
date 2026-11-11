@@ -139,11 +139,43 @@ export function renderApplicationReceivedHtml(
   return baseLayout("Application Received - " + roleTitle, content);
 }
 
+/** Application received together with its paid registration fee (one email, not two). */
+export function renderApplicationFeePaidHtml(params: {
+  studentName: string;
+  roleTitle: string;
+  companyName: string;
+  applicationId: string;
+  orderId: string;
+  amountFormatted: string;
+}): string {
+  const role = escapeHtml(params.roleTitle);
+  const company = escapeHtml(params.companyName);
+  const content = `
+    <h1 style="font-size: 22px; font-weight: bold; margin-top: 0; margin-bottom: 12px; letter-spacing: -0.5px;">Application submitted and fee received</h1>
+    <p>Hello ${escapeHtml(params.studentName)},</p>
+    <p>We received your registration fee, so your application for <strong>${role}</strong> at <strong>${company}</strong> is now with our team for review.</p>
+    <div style="background-color: #F5F2EA; border: 1px solid #D8D3C4; padding: 16px; margin: 20px 0; font-family: monospace; font-size: 12px; line-height: 1.8;">
+      <div><strong>Application ID:</strong> ${escapeHtml(params.applicationId)}</div>
+      <div><strong>Position:</strong> ${role} at ${company}</div>
+      <div><strong>Registration fee paid:</strong> <span style="color: #B8341A; font-weight: bold;">${escapeHtml(params.amountFormatted)}</span></div>
+      <div><strong>Order ID:</strong> ${escapeHtml(params.orderId)}</div>
+      <div><strong>Status:</strong> SUBMITTED</div>
+    </div>
+    <p>If you are not selected, the fee is refunded in full to the account you paid from.</p>
+    <div style="margin: 20px 0;">
+      <a href="${SITE_URL}/dashboard/student" class="btn" target="_blank">Track your application →</a>
+    </div>
+    <p class="notice">Your payment receipt (PDF) is in your Student Dashboard under Payments.</p>
+  `;
+  return baseLayout("Application received - " + params.roleTitle, content);
+}
+
 export function renderStatusChangedHtml(
   studentName: string,
   roleTitle: string,
   companyName: string,
-  newStatus: string
+  newStatus: string,
+  note?: string
 ): string {
   const content = `
     <h1 style="font-size: 22px; font-weight: bold; margin-top: 0; margin-bottom: 12px; letter-spacing: -0.5px;">Application status update</h1>
@@ -152,6 +184,7 @@ export function renderStatusChangedHtml(
     <div style="background-color: #F5F2EA; border: 1px solid #D8D3C4; padding: 16px; margin: 20px 0; font-family: monospace; font-size: 13px;">
       <strong>Updated Status:</strong> <span style="color: #B8341A; font-weight: bold;">${newStatus}</span>
     </div>
+    ${note ? `<p>${escapeHtml(note)}</p>` : ""}
     <div style="margin: 20px 0;">
       <a href="${SITE_URL}/dashboard/student" class="btn" target="_blank">View in Student Dashboard →</a>
     </div>

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { apiFetch, ApiError, getStoredUser, redirectToLogin } from "../../../../lib/api";
+import { loadCashfreeSdk } from "../../../../lib/cashfree";
 import { formatDate, formatMoney } from "../../../../lib/format";
 import { ByteHubLogo } from "../../../../components/brand/ByteHubLogo";
 import { siteConfig } from "../../../../lib/siteConfig";
@@ -58,20 +59,6 @@ interface PaymentStatusResponse {
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- Cashfree's browser SDK ships no types */
-
-function loadCashfreeSdk(): Promise<any | null> {
-  return new Promise((resolve) => {
-    const existing = (window as any).Cashfree;
-    if (existing) return resolve(existing);
-
-    const script = document.createElement("script");
-    script.src = "https://sdk.cashfree.com/js/v3/cashfree.js";
-    script.async = true;
-    script.onload = () => resolve((window as any).Cashfree || null);
-    script.onerror = () => resolve(null);
-    document.body.appendChild(script);
-  });
-}
 
 const newIdempotencyKey = () =>
   `bh_pay_${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Date.now()}`;
