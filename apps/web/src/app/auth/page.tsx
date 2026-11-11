@@ -51,7 +51,8 @@ function AuthForm() {
   const [mode, setMode] = useState<"login" | "signup" | "forgot">(
     urlMode === "signup" ? "signup" : "login"
   );
-  const [role, setRole] = useState<"STUDENT" | "COMPANY">("STUDENT");
+  // Only students have accounts; ByteHUB posts every internship itself.
+  const role = "STUDENT";
 
   const [formData, setFormData] = useState({
     name: "",
@@ -172,7 +173,6 @@ function AuthForm() {
             email: formData.email,
             password: formData.password,
             role,
-            organizationName: role === "COMPANY" ? formData.organizationName : undefined,
           }),
         });
 
@@ -293,37 +293,18 @@ function AuthForm() {
             </div>
           )}
 
-          {/* Role selector for registration */}
+          {/* Companies don't sign up: they send roles and ByteHUB posts them. */}
           {mode === "signup" && (
-            <div className="space-y-2">
-              <label className="block text-xs font-sans font-semibold text-ink">
-                I am registering as:
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setRole("STUDENT")}
-                  className={`min-h-[44px] px-3 py-2 text-xs font-sans font-semibold border transition-colors ${
-                    role === "STUDENT"
-                      ? "border-[#16150F] bg-[#16150F] text-white"
-                      : "border-editorial-border bg-white text-editorial-muted hover:border-ink hover:text-ink"
-                  }`}
-                >
-                  Student
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRole("COMPANY")}
-                  className={`min-h-[44px] px-3 py-2 text-xs font-sans font-semibold border transition-colors ${
-                    role === "COMPANY"
-                      ? "border-[#16150F] bg-[#16150F] text-white"
-                      : "border-editorial-border bg-white text-editorial-muted hover:border-ink hover:text-ink"
-                  }`}
-                >
-                  Company / Employer
-                </button>
-              </div>
-            </div>
+            <p className="border border-editorial-border bg-canvas px-3 py-2 text-xs text-editorial-muted">
+              Student accounts only. Hiring?{" "}
+              <Link
+                href="/companies#submit-role"
+                className="font-semibold text-ink underline"
+              >
+                Send us your internship role
+              </Link>{" "}
+              and we&apos;ll post it for you.
+            </p>
           )}
 
           {/* Error Message */}
@@ -343,21 +324,6 @@ function AuthForm() {
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 />
-
-                {role === "COMPANY" && (
-                  <Input
-                    label="Company / Organization Name"
-                    required
-                    placeholder="e.g. HyperGrid Systems"
-                    value={formData.organizationName}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        organizationName: e.target.value,
-                      })
-                    }
-                  />
-                )}
               </>
             )}
 

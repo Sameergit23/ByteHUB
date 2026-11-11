@@ -43,6 +43,8 @@ hosting has no permanent disk.
 - [x] Page reveal animations, loaders, clear animated messages per error type, wake-up ping and
       automatic retries while the free API wakes
 - [x] Wrong domains fixed: emails linked to bytehub.dev, share links/sitemap fallback to bytehub.io
+- [x] Only ByteHUB posts internships and training: no company sign-up; admin panel can post/edit
+      internships, review applications and resumes, and create/edit programmes and cohorts
 - [ ] Only if you ever add a **free** cohort: a "join for free" endpoint (paid cohorts work; the
       API currently has no direct enrolment for price 0)
 
@@ -71,7 +73,9 @@ hosting has no permanent disk.
       then restart the API on Render. The production database was missing enrolment columns and
       payment/enrolment status values, which broke the admin panel and would break payments
 - [x] Admin panel loads with no error (after the database fix)
-- [ ] Company posts an internship → admin approves → student applies with resume → company opens resume
+- [ ] Admin posts an internship (Admin → Internships → Post internship) → student applies with resume →
+      admin opens the resume and moves the stage (Admin → Applications) → student gets the email
+- [ ] Admin creates a programme and a cohort (Admin → Programmes & cohorts) → it shows on /training
 - [ ] Sandbox payment → seat confirmed, receipt email, appears in dashboard
 - [ ] Forgot password, contact form, refund from admin panel
 - [ ] After the sandbox payment: offer letter email arrives and the letter opens from the dashboard

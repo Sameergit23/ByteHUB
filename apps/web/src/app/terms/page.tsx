@@ -51,7 +51,7 @@ export default function TermsPage() {
           items={[
             "You must give accurate information and keep your password confidential. You are responsible for activity on your account.",
             "If you are under 18, you may use ByteHUB only with the consent of a parent or legal guardian, who agrees to these terms on your behalf.",
-            "Company accounts must be created by someone authorised to act for that organisation.",
+            "Accounts are for students. Companies send internship roles through our For companies page, and ByteHUB posts them.",
             "We may suspend or close accounts that break these terms, post false information, or put other users at risk.",
           ]}
         />

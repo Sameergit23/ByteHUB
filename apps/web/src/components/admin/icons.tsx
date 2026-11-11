@@ -157,3 +157,20 @@ export const IconMail = icon(
     <path d="m3 6.5 9 6.5 9-6.5" />
   </>
 );
+
+export const IconApplicant = icon(
+  <>
+    <rect x="4" y="3" width="16" height="18" />
+    <circle cx="12" cy="9.5" r="2.5" />
+    <path d="M8 17c.6-2.1 2.1-3.2 4-3.2s3.4 1.1 4 3.2" />
+  </>
+);
+
+export const IconPlus = icon(<path d="M12 5v14M5 12h14" />);
+
+export const IconPencil = icon(
+  <>
+    <path d="M4 20h4L19 9l-4-4L4 16z" />
+    <path d="m13.5 6.5 4 4" />
+  </>
+);

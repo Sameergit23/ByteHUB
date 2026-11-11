@@ -2,7 +2,13 @@
 
 import { useState } from "react";
 import { useAdmin } from "../../../components/admin/AdminShell";
-import { IconBriefcase, IconExternal } from "../../../components/admin/icons";
+import { InternshipFormDrawer } from "../../../components/admin/InternshipForm";
+import {
+  IconBriefcase,
+  IconExternal,
+  IconPencil,
+  IconPlus,
+} from "../../../components/admin/icons";
 import type {
   AdminInternship,
   Envelope,
@@ -44,36 +50,29 @@ type Filter = InternshipStatus | "ALL";
 const PAGE_SIZE = 20;
 
 const EMPTY_TEXT: Record<Filter, { title: string; description: string }> = {
-  DRAFT: {
-    title: "Nothing waiting for approval",
-    description:
-      "When a company submits an internship, it appears here for you to review.",
-  },
   PUBLISHED: {
     title: "No live internships",
-    description: "Approved internships appear here.",
+    description:
+      "Post an internship and it appears here and on the public Internships page.",
   },
   CLOSED: {
     title: "No closed internships",
-    description: "Closed or declined postings appear here.",
+    description: "Internships you close stop taking applications and move here.",
   },
+  DRAFT: { title: "No drafts", description: "Draft internships appear here." },
   ALL: {
     title: "No internships yet",
-    description: "Companies haven't posted any internships.",
+    description: "Post your first internship to get started.",
   },
 };
 
-interface PendingChange {
-  internship: AdminInternship;
-  next: InternshipStatus;
-}
-
 export default function AdminInternshipsPage() {
-  const { summary, refreshSummary, notify } = useAdmin();
-  const [filter, setFilter] = useState<Filter>("DRAFT");
+  const { refreshSummary, notify } = useAdmin();
+  const [filter, setFilter] = useState<Filter>("PUBLISHED");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<AdminInternship | null>(null);
-  const [confirm, setConfirm] = useState<PendingChange | null>(null);
+  const [editing, setEditing] = useState<AdminInternship | "new" | null>(null);
+  const [confirmClose, setConfirmClose] = useState<AdminInternship | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const path = `/admin/internships?limit=${PAGE_SIZE}&page=${page}${filter === "ALL" ? "" : `&status=${filter}`}`;
@@ -96,24 +95,17 @@ export default function AdminInternshipsPage() {
       })
     );
     setBusyId(null);
-    setConfirm(null);
-
+    setConfirmClose(null);
     if (!result.ok) {
       notify("error", result.message);
       return;
     }
-    const messages: Record<InternshipStatus, string> = {
-      PUBLISHED:
-        internship.status === "DRAFT"
-          ? `"${internship.title}" is approved and now live.`
-          : `"${internship.title}" is live again.`,
-      CLOSED:
-        internship.status === "DRAFT"
-          ? `"${internship.title}" was declined. It won't be published.`
-          : `"${internship.title}" is closed to new applications.`,
-      DRAFT: `"${internship.title}" was moved back to drafts.`,
-    };
-    notify("success", messages[next]);
+    notify(
+      "success",
+      next === "PUBLISHED"
+        ? `"${internship.title}" is live on the Internships page.`
+        : `"${internship.title}" is closed to new applications.`
+    );
     setSelected((current) =>
       current && current.id === internship.id ? { ...current, status: next } : current
     );
@@ -121,17 +113,10 @@ export default function AdminInternshipsPage() {
     refreshSummary();
   };
 
-  /** Approving is the expected action, so it runs at once; declining and closing ask first. */
-  const requestStatus = (internship: AdminInternship, next: InternshipStatus) => {
-    if (next === "PUBLISHED") {
-      void setStatus(internship, next);
-    } else {
-      setConfirm({ internship, next });
-    }
-  };
+  const applicantsHref = (i: AdminInternship) =>
+    `/admin/applications?internship=${encodeURIComponent(i.id)}`;
 
-  // On a single-status tab the status (and, for drafts, the applicant count) is the same on
-  // every row, so those columns only appear where they tell you something.
+  // On a single-status tab every row has the same status, so the column only shows on "All".
   const allColumns: (Column<AdminInternship> & { show?: boolean })[] = [
     {
       key: "title",
@@ -174,12 +159,11 @@ export default function AdminInternshipsPage() {
       header: "Applicants",
       align: "right",
       className: "tabular-nums",
-      show: filter !== "DRAFT",
       render: (i) => i._count?.applications ?? 0,
     },
     {
-      key: "submitted",
-      header: "Submitted",
+      key: "posted",
+      header: "Posted",
       className: "whitespace-nowrap text-zinc-500",
       hideBelow: "xl",
       render: (i) => timeAgo(i.createdAt),
@@ -195,20 +179,18 @@ export default function AdminInternshipsPage() {
       header: <span className="sr-only">Actions</span>,
       align: "right",
       render: (i) => (
-        <div className="flex justify-end gap-2">
-          <Button size="sm" variant="ghost" onClick={() => setSelected(i)}>
-            Review
+        <div className="flex justify-end gap-1">
+          <ButtonLink href={applicantsHref(i)} size="sm" variant="ghost">
+            Applicants
+          </ButtonLink>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setEditing(i)}
+            aria-label={`Edit ${i.title}`}
+          >
+            Edit
           </Button>
-          {i.status === "DRAFT" && (
-            <Button
-              size="sm"
-              variant="primary"
-              disabled={busyId === i.id}
-              onClick={() => requestStatus(i, "PUBLISHED")}
-            >
-              Approve
-            </Button>
-          )}
         </div>
       ),
     },
@@ -218,9 +200,17 @@ export default function AdminInternshipsPage() {
   return (
     <>
       <PageHeader
-        title="Internship approvals"
-        description="Review what companies post before it goes live. Approved internships appear on the public Internships page straight away."
-        actions={<RefreshButton onClick={list.reload} busy={list.loading} />}
+        title="Internships"
+        description="Every internship on ByteHUB is posted by your team. New internships go live on the public Internships page straight away."
+        actions={
+          <>
+            <RefreshButton onClick={list.reload} busy={list.loading} />
+            <Button variant="primary" onClick={() => setEditing("new")}>
+              <IconPlus className="h-4 w-4" />
+              Post internship
+            </Button>
+          </>
+        }
       />
 
       <Panel>
@@ -229,11 +219,6 @@ export default function AdminInternshipsPage() {
           value={filter}
           onChange={changeFilter}
           options={[
-            {
-              value: "DRAFT",
-              label: "Awaiting approval",
-              count: summary.pendingApprovals,
-            },
             { value: "PUBLISHED", label: "Live" },
             { value: "CLOSED", label: "Closed" },
             { value: "ALL", label: "All" },
@@ -247,7 +232,18 @@ export default function AdminInternshipsPage() {
           loading={list.loading}
           error={list.error}
           onRetry={list.reload}
-          empty={<EmptyState icon={IconBriefcase} {...EMPTY_TEXT[filter]} />}
+          empty={
+            <EmptyState
+              icon={IconBriefcase}
+              {...EMPTY_TEXT[filter]}
+              action={
+                <Button variant="primary" size="sm" onClick={() => setEditing("new")}>
+                  <IconPlus className="h-3.5 w-3.5" />
+                  Post internship
+                </Button>
+              }
+            />
+          }
         />
         <Pagination
           meta={list.data?.meta}
@@ -265,7 +261,7 @@ export default function AdminInternshipsPage() {
             <span className="flex flex-wrap items-center gap-2">
               <StatusBadge status={selected.status} />
               <span>
-                {selected.companyName} · submitted {timeAgo(selected.createdAt)}
+                {selected.companyName} · posted {timeAgo(selected.createdAt)}
               </span>
             </span>
           )
@@ -276,43 +272,36 @@ export default function AdminInternshipsPage() {
               {selected.status === "PUBLISHED" && (
                 <ButtonLink href={`/internships/${selected.slug}`} external>
                   <IconExternal className="h-4 w-4" />
-                  View public page
+                  Public page
                 </ButtonLink>
               )}
-              {selected.status === "DRAFT" && (
-                <>
-                  <Button
-                    variant="danger-outline"
-                    disabled={busyId === selected.id}
-                    onClick={() => requestStatus(selected, "CLOSED")}
-                  >
-                    Decline
-                  </Button>
-                  <Button
-                    variant="primary"
-                    disabled={busyId === selected.id}
-                    onClick={() => requestStatus(selected, "PUBLISHED")}
-                  >
-                    Approve &amp; publish
-                  </Button>
-                </>
-              )}
-              {selected.status === "PUBLISHED" && (
+              <ButtonLink href={applicantsHref(selected)}>
+                Applicants ({selected._count?.applications ?? 0})
+              </ButtonLink>
+              <Button
+                onClick={() => {
+                  setEditing(selected);
+                  setSelected(null);
+                }}
+              >
+                <IconPencil className="h-4 w-4" />
+                Edit
+              </Button>
+              {selected.status === "PUBLISHED" ? (
                 <Button
                   variant="danger-outline"
                   disabled={busyId === selected.id}
-                  onClick={() => requestStatus(selected, "CLOSED")}
+                  onClick={() => setConfirmClose(selected)}
                 >
                   Close listing
                 </Button>
-              )}
-              {selected.status === "CLOSED" && (
+              ) : (
                 <Button
                   variant="primary"
                   disabled={busyId === selected.id}
-                  onClick={() => requestStatus(selected, "PUBLISHED")}
+                  onClick={() => void setStatus(selected, "PUBLISHED")}
                 >
-                  Reopen
+                  {selected.status === "DRAFT" ? "Publish" : "Reopen"}
                 </Button>
               )}
             </>
@@ -323,25 +312,29 @@ export default function AdminInternshipsPage() {
       </Drawer>
 
       <ConfirmDialog
-        open={confirm !== null}
-        onClose={() => setConfirm(null)}
-        onConfirm={() => confirm && void setStatus(confirm.internship, confirm.next)}
-        busy={confirm !== null && busyId === confirm.internship.id}
+        open={confirmClose !== null}
+        onClose={() => setConfirmClose(null)}
+        onConfirm={() => confirmClose && void setStatus(confirmClose, "CLOSED")}
+        busy={confirmClose !== null && busyId === confirmClose.id}
         danger
-        title={
-          confirm?.internship.status === "DRAFT"
-            ? "Decline this internship?"
-            : "Close this listing?"
-        }
-        description={
-          confirm?.internship.status === "DRAFT"
-            ? "It won't be published. The company will see it as Closed. You can still reopen it later."
-            : "It disappears from the public Internships page and stops accepting applications. Existing applications are kept, and you can reopen it later."
-        }
-        confirmLabel={
-          confirm?.internship.status === "DRAFT" ? "Decline" : "Close listing"
-        }
+        title="Close this listing?"
+        description="It disappears from the public Internships page and stops accepting applications. Existing applications are kept, and you can reopen it later."
+        confirmLabel="Close listing"
       />
+
+      {editing !== null && (
+        <InternshipFormDrawer
+          internship={editing === "new" ? null : editing}
+          onClose={() => setEditing(null)}
+          onSaved={(message) => {
+            setEditing(null);
+            notify("success", message);
+            if (filter !== "PUBLISHED" && filter !== "ALL") setFilter("PUBLISHED");
+            list.reload();
+            refreshSummary();
+          }}
+        />
+      )}
     </>
   );
 }

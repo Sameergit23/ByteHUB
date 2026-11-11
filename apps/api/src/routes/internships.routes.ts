@@ -28,20 +28,20 @@ internshipsRouter.get(
 // Public: detail by slug or id
 internshipsRouter.get("/:slug", InternshipController.getBySlug);
 
-// Company & Admin: create internship
+// Admin only: ByteHUB posts every internship (companies don't have accounts)
 internshipsRouter.post(
   "/",
   authenticateJWT,
-  requireRoles("COMPANY", "ADMIN"),
+  requireRoles("ADMIN"),
   validateRequest({ body: CreateInternshipSchema }),
   InternshipController.create
 );
 
-// Company & Admin: edit own internship
+// Admin only: edit an internship
 internshipsRouter.patch(
   "/:id",
   authenticateJWT,
-  requireRoles("COMPANY", "ADMIN"),
+  requireRoles("ADMIN"),
   validateRequest({ body: UpdateInternshipSchema }),
   InternshipController.update
 );

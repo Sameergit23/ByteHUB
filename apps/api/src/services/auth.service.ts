@@ -69,6 +69,14 @@ export class AuthService {
    * Register a new Student or Company account
    */
   async register(input: SignUpInput, ip: string, userAgent?: string) {
+    // Only students sign up. ByteHUB posts internships itself; companies send roles
+    // through the "For companies" form instead of having accounts.
+    if (input.role !== "STUDENT") {
+      throw AppError.forbidden(
+        "Company accounts aren't available. Send your internship roles through the For companies page and the ByteHUB team will post them."
+      );
+    }
+
     // 1. Enforce minimum 10 characters and common-passwords dictionary check
     const validation = validatePasswordStrength(input.password);
     if (!validation.valid) {

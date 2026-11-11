@@ -105,7 +105,7 @@ export default function CompaniesPage() {
           <div className="pt-4 flex flex-wrap gap-4">
             <a href="#submit-role">
               <Button variant="primary" size="lg">
-                Post an internship
+                Send us your role
               </Button>
             </a>
             <Link href="/about">
@@ -384,7 +384,7 @@ export default function CompaniesPage() {
           </div>
           <a href="#submit-role" className="flex-shrink-0">
             <Button variant="primary" size="lg">
-              Post an internship
+              Send us your role
             </Button>
           </a>
         </section>

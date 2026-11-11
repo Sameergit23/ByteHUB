@@ -94,7 +94,7 @@ export default function AdminUsersPage() {
     <>
       <PageHeader
         title="Users"
-        description="Everyone with a ByteHUB account: students, companies and admins."
+        description="Everyone with a ByteHUB account: students and admins (older company accounts still appear here)."
         actions={
           <>
             <ExportButton entity="users" />

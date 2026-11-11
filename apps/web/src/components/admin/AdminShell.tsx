@@ -21,6 +21,7 @@ import {
 } from "../../lib/api";
 import { useSessionKeepAlive } from "../../lib/useSessionKeepAlive";
 import {
+  IconApplicant,
   IconAudit,
   IconBriefcase,
   IconCard,
@@ -40,7 +41,7 @@ import {
 } from "./icons";
 import { cx } from "./ui";
 import { adminErrorMessage } from "./useAdminResource";
-import type { AdminMetrics, Envelope, JobStats, Paged } from "./types";
+import type { AdminMetrics, Envelope, JobStats } from "./types";
 
 /* ------------------------------------------------------------------------------------------ */
 /* Shared state: sidebar counters and notifications                                            */
@@ -48,7 +49,6 @@ import type { AdminMetrics, Envelope, JobStats, Paged } from "./types";
 
 export interface AdminSummary {
   metrics: AdminMetrics | null;
-  pendingApprovals: number | null;
   failedJobs: number | null;
   loading: boolean;
   error: string | null;
@@ -78,7 +78,7 @@ export function useAdmin(): AdminContextValue {
 /* Navigation                                                                                  */
 /* ------------------------------------------------------------------------------------------ */
 
-type BadgeKey = "pendingApprovals" | "unreadMessages" | "failedJobs";
+type BadgeKey = "newApplications" | "unreadMessages" | "failedJobs";
 
 interface NavItem {
   href: string;
@@ -92,11 +92,12 @@ const NAV_GROUPS: { label?: string; items: NavItem[] }[] = [
   {
     label: "Operations",
     items: [
+      { href: "/admin/internships", label: "Internships", icon: IconBriefcase },
       {
-        href: "/admin/internships",
-        label: "Internships",
-        icon: IconBriefcase,
-        badge: "pendingApprovals",
+        href: "/admin/applications",
+        label: "Applications",
+        icon: IconApplicant,
+        badge: "newApplications",
       },
       { href: "/admin/users", label: "Users", icon: IconUsers },
     ],
@@ -144,7 +145,7 @@ function isActive(pathname: string, href: string): boolean {
 }
 
 const BADGE_STYLES: Record<BadgeKey, string> = {
-  pendingApprovals: "bg-amber-400 text-amber-950",
+  newApplications: "bg-amber-400 text-amber-950",
   unreadMessages: "bg-blue-500 text-white",
   failedJobs: "bg-red-500 text-white",
 };
@@ -162,7 +163,6 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [summary, setSummary] = useState<AdminSummary>({
     metrics: null,
-    pendingApprovals: null,
     failedJobs: null,
     loading: true,
     error: null,
@@ -184,13 +184,12 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
   const refreshSummary = useCallback(async () => {
     setSummary((s) => ({ ...s, loading: true }));
-    const [metrics, pending, jobs] = await Promise.allSettled([
+    const [metrics, jobs] = await Promise.allSettled([
       apiFetch<Envelope<AdminMetrics>>("/admin/metrics"),
-      apiFetch<Envelope<Paged<unknown>>>("/admin/internships?status=DRAFT&limit=1"),
       apiFetch<Envelope<JobStats>>("/admin/jobs/stats"),
     ]);
 
-    const unauthorised = [metrics, pending, jobs].some(
+    const unauthorised = [metrics, jobs].some(
       (r) =>
         r.status === "rejected" && r.reason instanceof ApiError && r.reason.status === 401
     );
@@ -201,8 +200,6 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
     setSummary({
       metrics: metrics.status === "fulfilled" ? metrics.value.data : null,
-      pendingApprovals:
-        pending.status === "fulfilled" ? pending.value.data.meta.total : null,
       failedJobs: jobs.status === "fulfilled" ? jobs.value.data.failedDlqCount : null,
       loading: false,
       error:
@@ -236,7 +233,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   };
 
   const badgeCount = (key: BadgeKey | undefined): number | null => {
-    if (key === "pendingApprovals") return summary.pendingApprovals;
+    if (key === "newApplications") return summary.metrics?.newApplications ?? null;
     if (key === "unreadMessages") return summary.metrics?.unhandledMessages ?? null;
     if (key === "failedJobs") return summary.failedJobs;
     return null;

@@ -18,6 +18,7 @@ export interface AdminMetrics {
   applicationCount: number;
   activeEnrollments: number;
   unhandledMessages: number;
+  newApplications?: number;
   totalRevenueINR: number;
   totalRevenueUSD: number;
 }
@@ -52,6 +53,7 @@ export interface AdminInternship {
   openings: number;
   deadline: string;
   status: InternshipStatus;
+  trackId?: string | null;
   createdAt: string;
   company: { name: string; organizationName: string | null; email: string } | null;
   _count?: { applications: number };
@@ -168,4 +170,57 @@ export interface Envelope<T> {
   status?: string;
   message?: string;
   data: T;
+}
+
+export type ApplicationStatus =
+  "SUBMITTED" | "UNDER_REVIEW" | "INTERVIEW" | "OFFERED" | "REJECTED" | "WITHDRAWN";
+
+export interface AdminApplication {
+  id: string;
+  internshipId: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  collegeOrUniversity: string;
+  graduationYear: number;
+  degree: string;
+  githubUrl: string;
+  linkedinUrl: string;
+  portfolioUrl: string | null;
+  bioSummary: string;
+  whyInterested: string;
+  relevantProjectDescription: string;
+  availableHoursPerWeek: number;
+  earliestStartDate: string;
+  status: ApplicationStatus;
+  feedbackNote: string | null;
+  createdAt: string;
+  hasResume: boolean;
+  internship: { id: string; title: string; companyName: string; slug: string } | null;
+}
+
+export interface AdminTrack {
+  id: string;
+  slug: string;
+  name: string;
+}
+
+export interface SyllabusWeek {
+  week: number;
+  title: string;
+  description: string;
+}
+
+export interface AdminProgramme {
+  id: string;
+  trackId: string;
+  slug: string;
+  title: string;
+  summary: string;
+  description: string;
+  syllabus: SyllabusWeek[];
+  prerequisites: string[];
+  published: boolean;
+  track: { id: string; name: string } | null;
+  _count?: { cohorts: number };
 }

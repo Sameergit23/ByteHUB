@@ -394,7 +394,7 @@ export function Badge({
 
 const STATUS_LABELS: Record<string, { label: string; tone: Tone }> = {
   // Internships
-  DRAFT: { label: "Awaiting approval", tone: "amber" },
+  DRAFT: { label: "Draft", tone: "amber" },
   PUBLISHED: { label: "Live", tone: "green" },
   CLOSED: { label: "Closed", tone: "neutral" },
   // Payments
@@ -409,6 +409,13 @@ const STATUS_LABELS: Record<string, { label: string; tone: Tone }> = {
   COMPLETED: { label: "Completed", tone: "blue" },
   CANCELLED: { label: "Cancelled", tone: "neutral" },
   EXPIRED: { label: "Expired", tone: "neutral" },
+  // Applications
+  SUBMITTED: { label: "New", tone: "blue" },
+  UNDER_REVIEW: { label: "In review", tone: "amber" },
+  INTERVIEW: { label: "Interview", tone: "violet" },
+  OFFERED: { label: "Offered", tone: "green" },
+  REJECTED: { label: "Not selected", tone: "neutral" },
+  WITHDRAWN: { label: "Withdrawn", tone: "neutral" },
   // Roles
   STUDENT: { label: "Student", tone: "blue" },
   COMPANY: { label: "Company", tone: "violet" },
@@ -746,6 +753,61 @@ export function FilterTabs<V extends string>({
 
 export const inputClass =
   "h-9 w-full border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-blue-600";
+
+export const textareaClass =
+  "min-h-[6rem] w-full border border-zinc-300 bg-white px-3 py-2 text-sm leading-relaxed text-zinc-900 placeholder:text-zinc-400 focus:border-blue-600";
+
+/** Inline problem message inside forms and dialogs (shakes so a repeat error is noticed). */
+export function FormError({ message }: { message: string | null }) {
+  if (!message) return null;
+  return (
+    <p
+      key={message}
+      role="alert"
+      className="animate-alert-shake border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
+    >
+      {message}
+    </p>
+  );
+}
+
+export function CheckboxField({
+  id,
+  label,
+  hint,
+  checked,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  hint?: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label htmlFor={id} className="flex cursor-pointer items-start gap-3">
+      <input
+        id={id}
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="mt-0.5 h-4 w-4 accent-blue-600"
+      />
+      <span>
+        <span className="block text-sm font-medium text-zinc-800">{label}</span>
+        {hint && <span className="block text-xs text-zinc-500">{hint}</span>}
+      </span>
+    </label>
+  );
+}
+
+/** Splits a textarea into trimmed, non-empty lines (one item per line). */
+export function splitLines(text: string): string[] {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
 
 export function SearchInput({
   value,

@@ -1,5 +1,12 @@
 import { Router, Request, Response, NextFunction } from "express";
-import { Prisma, Role, InternshipStatus, PaymentStatus } from "@prisma/client";
+import { z } from "zod";
+import {
+  Prisma,
+  Role,
+  InternshipStatus,
+  PaymentStatus,
+  ApplicationStatus,
+} from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 
 /** Returns the value only when it is one of the allowed enum members. */
@@ -96,6 +103,7 @@ adminRouter.get(
       payments,
       activeEnrollments,
       unhandledMessages,
+      newApplications,
     ] = await Promise.all([
       prisma.user.count({ where: { deletedAt: null } }),
       prisma.internship.count({ where: { deletedAt: null } }),
@@ -106,6 +114,7 @@ adminRouter.get(
       }),
       prisma.enrollment.count({ where: { status: "ACTIVE" } }),
       prisma.contactMessage.count({ where: { isRead: false } }),
+      prisma.application.count({ where: { deletedAt: null, status: "SUBMITTED" } }),
     ]);
 
     const totalRevenueINR = payments
@@ -124,6 +133,7 @@ adminRouter.get(
         applicationCount,
         activeEnrollments,
         unhandledMessages,
+        newApplications,
         totalRevenueINR,
         totalRevenueUSD,
       },
@@ -251,6 +261,323 @@ adminRouter.patch(
     });
 
     res.status(200).json({ status: "success", data: updated });
+  })
+);
+
+// ---------------------------------------------------------------------------
+// 4b. Applications (ByteHUB reviews every applicant; companies have no accounts)
+// ---------------------------------------------------------------------------
+
+adminRouter.get(
+  "/applications",
+  wrap(async (req: Request, res: Response): Promise<void> => {
+    const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
+    const limit = Math.min(
+      50,
+      Math.max(1, parseInt(req.query.limit as string, 10) || 20)
+    );
+    const status = pickEnum(req.query.status, Object.values(ApplicationStatus));
+    const internshipId =
+      typeof req.query.internshipId === "string" ? req.query.internshipId : undefined;
+    const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+
+    const where: Prisma.ApplicationWhereInput = {
+      deletedAt: null,
+      ...(status ? { status } : {}),
+      ...(internshipId ? { internshipId } : {}),
+      ...(search
+        ? {
+            OR: [
+              { fullName: { contains: search, mode: "insensitive" } },
+              { email: { contains: search, mode: "insensitive" } },
+            ],
+          }
+        : {}),
+    };
+
+    const [total, rows] = await Promise.all([
+      prisma.application.count({ where }),
+      prisma.application.findMany({
+        where,
+        include: {
+          internship: {
+            select: { id: true, title: true, companyName: true, slug: true },
+          },
+        },
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: { createdAt: "desc" },
+      }),
+    ]);
+
+    // The resume itself is opened through /applications/:id/resume (signed, short-lived
+    // link), so the stored file path is not sent to the browser.
+    const items = rows.map(({ resumeUrl, studentId: _studentId, ...rest }) => ({
+      ...rest,
+      hasResume: Boolean(resumeUrl),
+    }));
+
+    res.status(200).json({
+      status: "success",
+      data: { items, meta: { page, limit, total, totalPages: Math.ceil(total / limit) } },
+    });
+  })
+);
+
+// ---------------------------------------------------------------------------
+// 4c. Training catalogue: tracks, programmes and cohorts (create & edit)
+// ---------------------------------------------------------------------------
+
+const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+const SyllabusWeekSchema = z.object({
+  week: z.number().int().min(1).max(104),
+  title: z.string().trim().min(2, "Each week needs a title").max(160),
+  description: z.string().trim().max(600),
+});
+
+const programmeFields = {
+  trackId: z.string().min(1, "Choose a track"),
+  title: z.string().trim().min(3, "Title must be at least 3 characters").max(120),
+  slug: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .max(100)
+    .regex(SLUG_PATTERN, "Web address: lowercase letters, numbers and dashes only"),
+  summary: z.string().trim().min(10, "Summary must be at least 10 characters").max(240),
+  description: z
+    .string()
+    .trim()
+    .min(30, "Description must be at least 30 characters")
+    .max(5000),
+  syllabus: z.array(SyllabusWeekSchema).max(104),
+  prerequisites: z.array(z.string().trim().min(1).max(200)).max(30),
+  published: z.boolean(),
+};
+
+const ProgrammeCreateSchema = z.object({
+  ...programmeFields,
+  slug: programmeFields.slug.optional(),
+  syllabus: programmeFields.syllabus.optional(),
+  prerequisites: programmeFields.prerequisites.optional(),
+  published: programmeFields.published.optional(),
+});
+// No defaults on update, so fields that are not sent stay as they are.
+const ProgrammeUpdateSchema = z.object(programmeFields).partial();
+
+const cohortFields = {
+  programmeId: z.string().min(1, "Choose a programme"),
+  name: z.string().trim().min(3, "Name must be at least 3 characters").max(120),
+  cohortCode: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z0-9-]{3,40}$/, "Code: letters, numbers and dashes only (3 to 40)"),
+  mode: z.enum(["REMOTE", "HYBRID", "ON_SITE"]),
+  startDate: z.coerce.date(),
+  endDate: z.coerce.date(),
+  priceAmount: z.number().int().min(0).max(100_000_000), // paise
+  seatsTotal: z.number().int().min(0).max(10_000),
+  published: z.boolean(),
+};
+
+const CohortCreateSchema = z.object({
+  ...cohortFields,
+  published: cohortFields.published.optional(),
+});
+// The code and programme are fixed once created (payments and certificates refer to them);
+// seats change through /cohorts/:id/capacity.
+const CohortUpdateSchema = z
+  .object({
+    name: cohortFields.name,
+    mode: cohortFields.mode,
+    startDate: cohortFields.startDate,
+    endDate: cohortFields.endDate,
+    priceAmount: cohortFields.priceAmount,
+    published: cohortFields.published,
+  })
+  .partial();
+
+const slugify = (text: string): string =>
+  text
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 100);
+
+const weeksBetween = (start: Date, end: Date): number =>
+  Math.max(1, Math.round((end.getTime() - start.getTime()) / (7 * 24 * 60 * 60 * 1000)));
+
+/** Turns a unique-constraint clash into a readable 409. */
+function uniqueClash(err: unknown, message: string): never {
+  if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+    throw AppError.conflict(message);
+  }
+  throw err;
+}
+
+async function auditAdmin(
+  req: Request,
+  action: string,
+  entityType: string,
+  entityId: string,
+  details: Prisma.InputJsonValue
+) {
+  await prisma.auditLog
+    .create({ data: { userId: req.user?.id, action, entityType, entityId, details } })
+    .catch(() => null);
+}
+
+adminRouter.get(
+  "/tracks",
+  wrap(async (_req: Request, res: Response): Promise<void> => {
+    const tracks = await prisma.track.findMany({
+      orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
+      select: { id: true, slug: true, name: true },
+    });
+    res.status(200).json({ status: "success", data: tracks });
+  })
+);
+
+adminRouter.get(
+  "/programmes",
+  wrap(async (_req: Request, res: Response): Promise<void> => {
+    const programmes = await prisma.programme.findMany({
+      include: {
+        track: { select: { id: true, name: true } },
+        _count: { select: { cohorts: true } },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+    res.status(200).json({ status: "success", data: programmes });
+  })
+);
+
+adminRouter.post(
+  "/programmes",
+  wrap(async (req: Request, res: Response): Promise<void> => {
+    const input = ProgrammeCreateSchema.parse(req.body);
+    const slug = input.slug || slugify(input.title);
+    if (!SLUG_PATTERN.test(slug)) {
+      throw AppError.badRequest(
+        "Choose a web address made of letters, numbers and dashes."
+      );
+    }
+    const programme = await prisma.programme
+      .create({
+        data: {
+          trackId: input.trackId,
+          slug,
+          title: input.title,
+          summary: input.summary,
+          description: input.description,
+          syllabus: input.syllabus ?? [],
+          prerequisites: input.prerequisites ?? [],
+          published: input.published ?? true,
+        },
+      })
+      .catch((err) =>
+        uniqueClash(err, `Another programme already uses the web address "${slug}".`)
+      );
+    await auditAdmin(req, "ADMIN_PROGRAMME_CREATED", "PROGRAMME", programme.id, {
+      slug,
+      title: input.title,
+    });
+    res.status(201).json({ status: "success", data: programme });
+  })
+);
+
+adminRouter.patch(
+  "/programmes/:id",
+  wrap(async (req: Request, res: Response): Promise<void> => {
+    const id = String(req.params.id || "");
+    const input = ProgrammeUpdateSchema.parse(req.body);
+    const programme = await prisma.programme
+      .update({ where: { id }, data: input })
+      .catch((err) => {
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2025") {
+          throw AppError.notFound("Programme not found.");
+        }
+        return uniqueClash(err, "Another programme already uses that web address.");
+      });
+    await auditAdmin(req, "ADMIN_PROGRAMME_UPDATED", "PROGRAMME", id, {
+      fields: Object.keys(input),
+    });
+    res.status(200).json({ status: "success", data: programme });
+  })
+);
+
+adminRouter.post(
+  "/cohorts",
+  wrap(async (req: Request, res: Response): Promise<void> => {
+    const input = CohortCreateSchema.parse(req.body);
+    if (input.endDate <= input.startDate) {
+      throw AppError.badRequest("The end date must be after the start date.");
+    }
+    const programme = await prisma.programme.findUnique({
+      where: { id: input.programmeId },
+      select: { id: true },
+    });
+    if (!programme) throw AppError.notFound("Programme not found.");
+
+    const cohort = await prisma.cohort
+      .create({
+        data: {
+          programmeId: input.programmeId,
+          cohortCode: input.cohortCode,
+          name: input.name,
+          mode: input.mode,
+          startDate: input.startDate,
+          endDate: input.endDate,
+          durationWeeks: weeksBetween(input.startDate, input.endDate),
+          seatsTotal: input.seatsTotal,
+          seatsLeft: input.seatsTotal,
+          priceAmount: input.priceAmount,
+          currency: "INR",
+          published: input.published ?? true,
+        },
+      })
+      .catch((err) =>
+        uniqueClash(err, `Another cohort already uses the code ${input.cohortCode}.`)
+      );
+    await auditAdmin(req, "ADMIN_COHORT_CREATED", "COHORT", cohort.id, {
+      cohortCode: cohort.cohortCode,
+      priceAmount: cohort.priceAmount,
+      seatsTotal: cohort.seatsTotal,
+    });
+    res.status(201).json({ status: "success", data: cohort });
+  })
+);
+
+adminRouter.patch(
+  "/cohorts/:id",
+  wrap(async (req: Request, res: Response): Promise<void> => {
+    const id = String(req.params.id || "");
+    const input = CohortUpdateSchema.parse(req.body);
+    const existing = await prisma.cohort.findUnique({ where: { id } });
+    if (!existing) throw AppError.notFound("Cohort not found.");
+
+    const startDate = input.startDate ?? existing.startDate;
+    const endDate = input.endDate ?? existing.endDate;
+    if (endDate <= startDate) {
+      throw AppError.badRequest("The end date must be after the start date.");
+    }
+    const cohort = await prisma.cohort.update({
+      where: { id },
+      data: {
+        ...input,
+        ...(input.startDate || input.endDate
+          ? { durationWeeks: weeksBetween(startDate, endDate) }
+          : {}),
+      },
+    });
+    await auditAdmin(req, "ADMIN_COHORT_UPDATED", "COHORT", id, {
+      cohortCode: existing.cohortCode,
+      fields: Object.keys(input),
+    });
+    res.status(200).json({ status: "success", data: cohort });
   })
 );
 

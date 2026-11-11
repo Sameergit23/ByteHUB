@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useAdmin } from "../../components/admin/AdminShell";
 import {
   IconArrowRight,
+  IconApplicant,
   IconBriefcase,
   IconCard,
   IconClipboard,
@@ -14,7 +15,7 @@ import {
 } from "../../components/admin/icons";
 import type {
   AdminAuditLog,
-  AdminInternship,
+  AdminApplication,
   AdminMessage,
   AdminPayment,
   Envelope,
@@ -45,8 +46,8 @@ export default function AdminOverviewPage() {
   const { summary, refreshSummary } = useAdmin();
   const metrics = summary.metrics;
 
-  const pending = useAdminResource<AdminInternship[], Envelope<Paged<AdminInternship>>>(
-    "/admin/internships?status=DRAFT&limit=5",
+  const latest = useAdminResource<AdminApplication[], Envelope<Paged<AdminApplication>>>(
+    "/admin/applications?status=SUBMITTED&limit=5",
     (res) => res.data.items
   );
   const messages = useAdminResource<AdminMessage[], Envelope<AdminMessage[]>>(
@@ -65,7 +66,7 @@ export default function AdminOverviewPage() {
 
   const busy =
     summary.loading ||
-    pending.loading ||
+    latest.loading ||
     messages.loading ||
     payments.loading ||
     activity.loading ||
@@ -73,14 +74,14 @@ export default function AdminOverviewPage() {
 
   const refreshAll = () => {
     refreshSummary();
-    pending.reload();
+    latest.reload();
     messages.reload();
     payments.reload();
     activity.reload();
     health.reload();
   };
 
-  const pendingCount = summary.pendingApprovals;
+  const newApplications = metrics?.newApplications ?? null;
   const unreadCount = metrics?.unhandledMessages ?? null;
   const failedJobs = summary.failedJobs;
   const loadingNumbers = summary.loading && !metrics;
@@ -105,19 +106,19 @@ export default function AdminOverviewPage() {
         className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4"
       >
         <StatCard
-          label="Awaiting approval"
-          icon={IconBriefcase}
-          value={pendingCount ?? "—"}
-          loading={summary.loading && pendingCount === null}
-          tone={pendingCount ? "amber" : "neutral"}
+          label="New applications"
+          icon={IconApplicant}
+          value={newApplications ?? "—"}
+          loading={loadingNumbers}
+          tone={newApplications ? "amber" : "neutral"}
           hint={
-            pendingCount
-              ? "Review now →"
-              : pendingCount === 0
-                ? "All caught up"
+            newApplications
+              ? "Review applicants →"
+              : newApplications === 0
+                ? "All reviewed"
                 : undefined
           }
-          href="/admin/internships"
+          href="/admin/applications"
         />
         <StatCard
           label="Unread messages"
@@ -159,7 +160,7 @@ export default function AdminOverviewPage() {
           icon={IconUsers}
           value={metrics?.userCount ?? "—"}
           loading={loadingNumbers}
-          hint="Students, companies and admins"
+          hint="Students and admins"
           href="/admin/users"
         />
         <StatCard
@@ -176,6 +177,7 @@ export default function AdminOverviewPage() {
           value={metrics?.applicationCount ?? "—"}
           loading={loadingNumbers}
           hint="Across all internships"
+          href="/admin/applications"
         />
         <StatCard
           label="Failed jobs"
@@ -197,36 +199,36 @@ export default function AdminOverviewPage() {
       {/* Needs attention + system */}
       <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
         <Panel
-          title="Awaiting approval"
-          description="New internship postings from companies"
-          actions={<ViewAll href="/admin/internships" />}
+          title="New applications"
+          description="Students waiting for a first look"
+          actions={<ViewAll href="/admin/applications" />}
         >
           <ListBody
-            loading={pending.loading && !pending.data}
-            error={pending.error}
-            onRetry={pending.reload}
+            loading={latest.loading && !latest.data}
+            error={latest.error}
+            onRetry={latest.reload}
             empty={
               <EmptyState
-                icon={IconBriefcase}
-                title="Nothing to approve"
-                description="New postings from companies will appear here."
+                icon={IconApplicant}
+                title="No new applications"
+                description="Applications to your internships appear here."
               />
             }
-            items={pending.data}
+            items={latest.data}
             render={(item) => (
               <Link
-                href="/admin/internships"
+                href="/admin/applications"
                 className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-zinc-50"
               >
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-zinc-900">
-                    {item.title}
+                    {item.fullName}
                   </p>
                   <p className="truncate text-xs text-zinc-500">
-                    {item.companyName} · submitted {timeAgo(item.createdAt)}
+                    {item.internship?.title || "Internship"} · {timeAgo(item.createdAt)}
                   </p>
                 </div>
-                <Badge tone="amber">Review</Badge>
+                <Badge tone="blue">New</Badge>
               </Link>
             )}
             keyOf={(item) => item.id}
