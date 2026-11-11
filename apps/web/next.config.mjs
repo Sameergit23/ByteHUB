@@ -18,6 +18,16 @@ const apiOrigin = (
   .replace(/\/$/, "")
   .replace(/\/api$/, "");
 
+// The public address of the site. Render also serves it at <service>.onrender.com, but the API
+// only accepts requests from this address, so pages opened there are sent here instead.
+const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://bytehubnet.com").replace(
+  /\/$/,
+  ""
+);
+const siteHost = new URL(siteUrl).host;
+const redirectOnrenderHost =
+  !siteHost.endsWith(".onrender.com") && !siteHost.startsWith("localhost");
+
 // Cashfree's checkout script opens the payment page by submitting a form to its checkout
 // address (sandbox.cashfree.com for tests, api.cashfree.com for live payments), sometimes inside
 // a frame on phones. Only those two Cashfree addresses are added for forms and frames.
@@ -83,6 +93,19 @@ const nextConfig = {
         hostname: "**",
       },
     ],
+  },
+  async redirects() {
+    if (!redirectOnrenderHost) return [];
+    return [
+      {
+        // Every page on the *.onrender.com address (not the /api proxy) → same page on the
+        // real domain. Temporary (307) so it can be changed later without browsers caching it.
+        source: "/:path((?!api(?:/|$)).*)",
+        has: [{ type: "host", value: "(?<service>[a-z0-9-]+)\\.onrender\\.com" }],
+        destination: `${siteUrl}/:path`,
+        permanent: false,
+      },
+    ];
   },
   async rewrites() {
     return [

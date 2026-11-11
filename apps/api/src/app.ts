@@ -3,6 +3,7 @@ import type { IncomingMessage } from "node:http";
 import helmet from "helmet";
 import cors from "cors";
 import { env } from "./config/env.js";
+import { AppError } from "./utils/apiError.js";
 import { requestIdMiddleware } from "./middleware/requestId.js";
 import { pinoHttpMiddleware } from "./middleware/pinoHttp.js";
 import { errorHandler } from "./middleware/errorHandler.js";
@@ -128,7 +129,12 @@ export const createApp = (): Express => {
         if (allowedOrigins.has(requestOrigin) || env.NODE_ENV !== "production") {
           return callback(null, true);
         }
-        return callback(new Error("CORS origin access denied by policy."));
+        // A clear 403 (not a 500): e.g. the site opened at its *.onrender.com address.
+        return callback(
+          AppError.forbidden(
+            `This page was opened from an address ByteHUB doesn't accept. Please use ${env.FRONTEND_URL}.`
+          )
+        );
       },
       credentials: true,
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
