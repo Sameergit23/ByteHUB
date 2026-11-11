@@ -162,13 +162,20 @@ export async function openCashfreeCheckout(
   const cashfree = Cashfree({
     mode: cashfreeEnv === "PRODUCTION" ? "production" : "sandbox",
   });
-  const result = await cashfree.checkout({ paymentSessionId, redirectTarget: "_self" });
+  // The second argument (false) turns off Cashfree's "quick pay" sheet, which the script
+  // otherwise shows inside our page on screens narrower than 768px. In that sheet, card and
+  // netbanking need pop-up windows and forms sent from our page to the bank, which phone
+  // browsers block. With it off, phones get Cashfree's full page, the same as laptops. The
+  // script passes the same value itself when quick pay doesn't apply.
+  const result = await cashfree.checkout(
+    { paymentSessionId, redirectTarget: "_self" },
+    false
+  );
   if (result?.error) {
     return {
       redirecting: false,
       error: result.error.message || "Payment could not start",
     };
   }
-  // On phones Cashfree may finish inside a quick-pay window without leaving the page.
   return { redirecting: Boolean(result?.redirect) };
 }
