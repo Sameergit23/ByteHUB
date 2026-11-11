@@ -3,7 +3,8 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { getStoredUser, logout, refreshSession, StoredUser } from "../../lib/api";
+import { getStoredUser, logout, StoredUser } from "../../lib/api";
+import { useSessionKeepAlive } from "../../lib/useSessionKeepAlive";
 import { ByteHubLogo } from "../brand/ByteHubLogo";
 
 export interface NavItem {
@@ -42,27 +43,7 @@ export function DashboardLayout({
     setUser(getStoredUser());
   }, []);
 
-  // Keep the 15-minute session alive while a dashboard is open, and renew it as soon as the
-  // tab comes back into view, so navigating between protected pages never hits a stale cookie.
-  useEffect(() => {
-    const renew = () => {
-      const last = Number(localStorage.getItem("bytehub_refreshed_at") || 0);
-      if (Date.now() - last > 10 * 60 * 1000) {
-        void refreshSession();
-      }
-    };
-    const onVisible = () => {
-      if (document.visibilityState === "visible") renew();
-    };
-
-    renew();
-    const timer = window.setInterval(renew, 60 * 1000);
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      window.clearInterval(timer);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, []);
+  useSessionKeepAlive();
 
   const handleLogout = async () => {
     await logout();

@@ -4,6 +4,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { DashboardLayout, NavItem } from "../../../components/dashboard/DashboardLayout";
 import { apiFetch, ApiError, clearAuth, redirectToLogin } from "../../../lib/api";
+import {
+  FormAlert,
+  describeError,
+  successAlert,
+  type AlertInfo,
+} from "../../../components/ui/FormAlert";
+import { PageLoader } from "../../../components/ui/Loader";
 import { formatDate, formatMoney, formatStipend } from "../../../lib/format";
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- API payloads are mapped field by field below */
@@ -105,11 +112,8 @@ export default function StudentDashboardPage() {
   const [enrollments, setEnrollments] = useState<EnrollmentRow[]>([]);
   const [payments, setPayments] = useState<PaymentRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<{
-    type: "success" | "error";
-    text: string;
-  } | null>(null);
+  const [loadError, setLoadError] = useState<AlertInfo | null>(null);
+  const [notice, setNotice] = useState<AlertInfo | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -164,9 +168,7 @@ export default function StudentDashboardPage() {
         return;
       }
       setLoadError(
-        err instanceof Error
-          ? err.message
-          : "Your dashboard could not be loaded. Please retry."
+        describeError(err, "Your dashboard could not be loaded. Please retry.")
       );
     } finally {
       setLoading(false);
@@ -220,12 +222,9 @@ export default function StudentDashboardPage() {
       setApplications((prev) =>
         prev.map((a) => (a.id === appId ? { ...a, status: "WITHDRAWN" } : a))
       );
-      setNotice({ type: "success", text: "Application withdrawn." });
+      setNotice(successAlert("Application withdrawn."));
     } catch (err: any) {
-      setNotice({
-        type: "error",
-        text: err?.message || "The application could not be withdrawn.",
-      });
+      setNotice(describeError(err, "The application could not be withdrawn."));
     } finally {
       setBusyId(null);
     }
@@ -239,15 +238,11 @@ export default function StudentDashboardPage() {
         method: "POST",
         body: JSON.stringify({ email: profile.email }),
       });
-      setNotice({
-        type: "success",
-        text: `A verification link has been emailed to ${profile.email}.`,
-      });
+      setNotice(
+        successAlert(`A verification link has been emailed to ${profile.email}.`)
+      );
     } catch (err: any) {
-      setNotice({
-        type: "error",
-        text: err?.message || "The verification email could not be sent.",
-      });
+      setNotice(describeError(err, "The verification email could not be sent."));
     }
   };
 
@@ -269,22 +264,18 @@ export default function StudentDashboardPage() {
       clearAuth();
       window.location.href = "/auth?mode=login";
     } catch (err: any) {
-      setNotice({
-        type: "error",
-        text: err?.message || "Your account could not be deleted. Please try again.",
-      });
+      setNotice(
+        describeError(err, "Your account could not be deleted. Please try again.")
+      );
     }
   };
 
   const handleCopyCredential = async (code: string) => {
     try {
       await navigator.clipboard.writeText(code);
-      setNotice({
-        type: "success",
-        text: `Credential code ${code} copied to clipboard.`,
-      });
+      setNotice(successAlert(`Credential code ${code} copied to clipboard.`));
     } catch {
-      setNotice({ type: "success", text: `Credential code: ${code}` });
+      setNotice(successAlert(`Credential code: ${code}`));
     }
   };
 
@@ -369,38 +360,11 @@ export default function StudentDashboardPage() {
         </Link>
       }
     >
-      {notice && (
-        <div
-          role={notice.type === "error" ? "alert" : "status"}
-          className={`mb-6 p-3 border text-xs ${
-            notice.type === "error"
-              ? "bg-red-50 border-red-200 text-red-700"
-              : "bg-green-50 border-green-200 text-green-800"
-          }`}
-        >
-          {notice.text}
-        </div>
-      )}
+      <FormAlert alert={notice} onDismiss={() => setNotice(null)} className="mb-6" />
 
-      {loading && (
-        <p className="font-mono text-xs text-[#5A574D]">Loading your dashboard...</p>
-      )}
+      {loading && <PageLoader label="Loading your dashboard…" />}
 
-      {!loading && loadError && (
-        <div
-          role="alert"
-          className="p-4 bg-red-50 border border-red-200 text-red-700 text-sm space-y-3"
-        >
-          <p>{loadError}</p>
-          <button
-            type="button"
-            onClick={() => void load()}
-            className="px-3 py-1.5 border border-red-700 text-xs font-mono"
-          >
-            Retry
-          </button>
-        </div>
-      )}
+      {!loading && <FormAlert alert={loadError} onRetry={() => void load()} />}
 
       {!loading && !loadError && profile && !profile.isEmailVerified && (
         <div className="mb-6 p-3 border border-[#D8D3C4] bg-[#FAF8F3] text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -493,13 +457,21 @@ export default function StudentDashboardPage() {
                     {currentTrack.cohortCode} · {currentTrack.mode}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("training")}
-                  className="self-start sm:self-auto px-3 py-1.5 border border-[#16150F] text-xs font-medium hover:bg-[#16150F] hover:text-[#F5F2EA] transition-colors"
-                >
-                  View Syllabus & Progress →
-                </button>
+                <div className="flex flex-wrap gap-2 self-start sm:self-auto">
+                  <Link
+                    href={`/dashboard/student/offer-letter/${currentTrack.id}`}
+                    className="px-3 py-1.5 border border-[#B8341A] text-[#B8341A] text-xs font-medium hover:bg-[#B8341A] hover:text-white transition-colors"
+                  >
+                    Offer Letter
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("training")}
+                    className="px-3 py-1.5 border border-[#16150F] text-xs font-medium hover:bg-[#16150F] hover:text-[#F5F2EA] transition-colors"
+                  >
+                    View Syllabus & Progress →
+                  </button>
+                </div>
               </div>
 
               <div>
@@ -661,6 +633,22 @@ export default function StudentDashboardPage() {
                 Cohort Code: {track.cohortCode} · Status: {track.status} · Starts{" "}
                 {track.startDate} · {track.durationWeeks} weeks
               </p>
+              <div className="flex flex-wrap gap-2">
+                <Link
+                  href={`/dashboard/student/offer-letter/${track.id}`}
+                  className="px-3 py-1.5 border border-[#16150F] text-xs font-medium hover:bg-[#16150F] hover:text-[#F5F2EA] transition-colors"
+                >
+                  Internship Offer Letter →
+                </Link>
+                {track.certificate && (
+                  <Link
+                    href={`/verify/${encodeURIComponent(track.certificate.code)}`}
+                    className="px-3 py-1.5 border border-[#B8341A] text-[#B8341A] text-xs font-medium hover:bg-[#B8341A] hover:text-white transition-colors"
+                  >
+                    Certificate →
+                  </Link>
+                )}
+              </div>
 
               <div className="space-y-3 pt-4">
                 <h3 className="font-mono text-xs uppercase tracking-wider font-semibold text-[#5A574D]">
@@ -774,13 +762,21 @@ export default function StudentDashboardPage() {
                         Code: {c.code} · Issued: {c.issuedAt}
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleCopyCredential(c.code)}
-                      className="px-3 py-1.5 border border-[#16150F] text-xs font-mono hover:bg-[#16150F] hover:text-white"
-                    >
-                      Copy Credential Code
-                    </button>
+                    <div className="flex flex-wrap gap-2">
+                      <Link
+                        href={`/verify/${encodeURIComponent(c.code)}`}
+                        className="px-3 py-1.5 bg-[#B8341A] text-white text-xs font-mono hover:bg-[#9C2B14]"
+                      >
+                        View &amp; Download
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyCredential(c.code)}
+                        className="px-3 py-1.5 border border-[#16150F] text-xs font-mono hover:bg-[#16150F] hover:text-white"
+                      >
+                        Copy Credential Code
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>

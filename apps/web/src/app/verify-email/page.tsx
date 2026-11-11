@@ -6,7 +6,23 @@ import { useSearchParams } from "next/navigation";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { ByteHubLogo } from "../../components/brand/ByteHubLogo";
-import { apiFetch, getStoredUser, errorMessage } from "../../lib/api";
+import { apiFetch, getStoredUser } from "../../lib/api";
+import {
+  FormAlert,
+  describeError,
+  makeAlert,
+  successAlert,
+  type AlertInfo,
+} from "../../components/ui/FormAlert";
+
+const EMAIL_VERIFIED = successAlert(
+  "You can now use every part of your account.",
+  "Your email address is verified"
+);
+const LINK_RESENT = successAlert(
+  "Check your inbox (and spam folder).",
+  "A new link is on its way"
+);
 
 function VerifyEmailContent() {
   const searchParams = useSearchParams();
@@ -15,8 +31,14 @@ function VerifyEmailContent() {
   const [state, setState] = useState<"verifying" | "verified" | "failed">(
     token ? "verifying" : "failed"
   );
-  const [message, setMessage] = useState<string | null>(
-    token ? null : "This verification link is incomplete."
+  const [message, setMessage] = useState<AlertInfo | null>(
+    token
+      ? null
+      : makeAlert(
+          "notFound",
+          "This verification link is incomplete",
+          "Open the link from your email again, or request a new one."
+        )
   );
   const [resendState, setResendState] = useState<"idle" | "sending" | "sent">("idle");
   const [dashboardHref, setDashboardHref] = useState("/auth?mode=login");
@@ -47,7 +69,7 @@ function VerifyEmailContent() {
       .catch((err: unknown) => {
         setState("failed");
         setMessage(
-          errorMessage(err, "This verification link is invalid or has expired.")
+          describeError(err, "This verification link is invalid or has expired.")
         );
       });
   }, [token]);
@@ -65,7 +87,7 @@ function VerifyEmailContent() {
     } catch (err) {
       setResendState("idle");
       setMessage(
-        errorMessage(err, "A new link could not be sent. Please try again shortly.")
+        describeError(err, "A new link could not be sent. Please try again shortly.")
       );
     }
   };
@@ -94,12 +116,7 @@ function VerifyEmailContent() {
 
           {state === "verified" && (
             <>
-              <div
-                role="status"
-                className="p-3 border border-green-700 bg-green-50 text-green-950 text-xs font-mono"
-              >
-                [ CONFIRMED ]: Your email address is verified.
-              </div>
+              <FormAlert alert={EMAIL_VERIFIED} />
               <Link href={dashboardHref}>
                 <Button variant="primary" fullWidth size="md">
                   Continue
@@ -110,20 +127,10 @@ function VerifyEmailContent() {
 
           {state === "failed" && (
             <>
-              <div
-                role="alert"
-                className="p-3 border border-accent bg-[#FBEBE8] text-accent text-xs font-mono"
-              >
-                [ ALERT ]: {message}
-              </div>
+              <FormAlert alert={message} />
 
               {resendState === "sent" ? (
-                <div
-                  role="status"
-                  className="p-3 border border-green-700 bg-green-50 text-green-950 text-xs font-mono"
-                >
-                  [ CONFIRMED ]: A new verification link has been emailed to you.
-                </div>
+                <FormAlert alert={LINK_RESENT} />
               ) : canResend ? (
                 <Button
                   type="button"

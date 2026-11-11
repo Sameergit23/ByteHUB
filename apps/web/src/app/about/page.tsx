@@ -4,6 +4,7 @@ import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { ColophonFooter } from "../../components/layout/ColophonFooter";
 import { ByteHubLogo } from "../../components/brand/ByteHubLogo";
+import { siteConfig } from "../../lib/siteConfig";
 
 export const metadata: Metadata = {
   title: "About Us — ByteHUB",
@@ -13,7 +14,7 @@ export const metadata: Metadata = {
     title: "About Us — ByteHUB",
     description:
       "We help students become working developers. ByteHUB pairs structured training with live internship projects.",
-    url: "https://bytehub.io/about",
+    url: `${siteConfig.siteUrl}/about`,
     siteName: "ByteHUB",
   },
 };
@@ -45,7 +46,7 @@ export default function AboutPage() {
     <div className="w-full bg-canvas min-h-screen">
       {/* 1. Hero & Value Cards Matching Image 2 */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-20 lg:py-24 space-y-12">
-        <div className="space-y-4 max-w-3xl">
+        <div className="hero-reveal space-y-4 max-w-3xl">
           <p className="text-xs sm:text-sm font-sans font-semibold text-accent tracking-normal">
             About us
           </p>

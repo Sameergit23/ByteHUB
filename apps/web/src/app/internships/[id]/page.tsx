@@ -7,6 +7,7 @@ import { Card, CardTitle } from "../../../components/ui/Card";
 import { ColophonFooter } from "../../../components/layout/ColophonFooter";
 import { JobPostingJsonLd } from "../../../components/seo/JobPostingJsonLd";
 import { getInternship } from "../../../lib/catalog";
+import { siteConfig } from "../../../lib/siteConfig";
 
 export async function generateMetadata({
   params,
@@ -25,7 +26,7 @@ export async function generateMetadata({
     openGraph: {
       title: `${internship.title} — ByteHUB`,
       description: internship.aboutRole,
-      url: `https://bytehub.io/internships/${internship.slug}`,
+      url: `${siteConfig.siteUrl}/internships/${internship.slug}`,
       siteName: "ByteHUB",
       type: "article",
     },
@@ -65,7 +66,7 @@ export default async function InternshipDetailPage({
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10">
         {/* Header Eyebrow & Title Matching Image 4 */}
-        <div className="space-y-4">
+        <div className="hero-reveal space-y-4">
           <p className="text-xs sm:text-sm font-sans font-semibold text-accent tracking-normal">
             Internship
           </p>

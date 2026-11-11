@@ -26,6 +26,13 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const NO_REFRESH_RETRY =
   /^\/auth\/(login|register|refresh|logout|forgot-password|reset-password|verify-email)/;
 
+// While the free API is waking up, Render answers 502/503/504. Read-only requests are safe to
+// repeat, so they wait and try again instead of failing (writes are never repeated).
+const WAKE_STATUSES = new Set([502, 503, 504]);
+const WAKE_RETRY_DELAYS_MS = [1500, 3000, 6000];
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export interface StoredUser {
   id: string;
   name: string;
@@ -202,14 +209,29 @@ export async function apiFetch<T>(
     if (csrf) headers["X-CSRF-Token"] = csrf;
   }
 
-  let res: Response;
-  try {
-    res = await fetch(`${API_BASE}${endpoint}`, {
-      ...options,
-      headers,
-      credentials: "include",
-    });
-  } catch {
+  // Health checks must report the truth immediately, so they are never retried.
+  const canWaitForWake = SAFE_METHODS.has(method) && !endpoint.startsWith("/health");
+
+  let res: Response | null = null;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      res = await fetch(`${API_BASE}${endpoint}`, {
+        ...options,
+        headers,
+        credentials: "include",
+      });
+    } catch {
+      res = null;
+    }
+
+    const retryDelay = WAKE_RETRY_DELAYS_MS[attempt];
+    const offline = !IS_SERVER && navigator.onLine === false;
+    const waking = res === null || WAKE_STATUSES.has(res.status);
+    if (!waking || offline || !canWaitForWake || retryDelay === undefined) break;
+    await sleep(retryDelay);
+  }
+
+  if (!res) {
     throw new ApiError(
       "Could not reach the ByteHUB server. Check your connection and try again.",
       0,

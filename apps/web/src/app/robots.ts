@@ -1,7 +1,8 @@
 import { MetadataRoute } from "next";
+import { siteConfig } from "../lib/siteConfig";
 
 export default function robots(): MetadataRoute.Robots {
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://bytehub.io";
+  const baseUrl = siteConfig.siteUrl;
 
   return {
     rules: {
@@ -12,4 +13,3 @@ export default function robots(): MetadataRoute.Robots {
     sitemap: `${baseUrl}/sitemap.xml`,
   };
 }
-

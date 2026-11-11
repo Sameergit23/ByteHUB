@@ -28,39 +28,39 @@ export default function GlobalError({
             <ByteHubLogo variant="light" size="sm" />
           </Link>
           <span className="font-mono text-xs uppercase tracking-widest text-accent font-bold">
-            SYSTEM STATUS: 500_RUNTIME_FAULT
+            Error 500
           </span>
         </div>
 
         {/* Fault Information */}
-        <div className="py-16 sm:py-24 space-y-6">
+        <div className="hero-reveal py-16 sm:py-24 space-y-6">
           <div className="inline-block border border-accent bg-[#B8341A]/10 text-accent px-3 py-1 font-mono text-xs font-bold uppercase tracking-wider">
-            Execution Interrupted
+            Something went wrong
           </div>
 
           <h1 className="font-heading text-4xl sm:text-6xl font-bold text-ink tracking-tight leading-none">
-            An unexpected platform exception was intercepted.
+            Sorry, this page hit a problem.
           </h1>
 
           <p className="font-sans text-base sm:text-lg text-editorial-muted max-w-2xl leading-relaxed">
-            Our runtime sentry trapped the defect without compromising session state or
-            sensitive credentials. You can trigger an automatic state reset or return to
-            safety.
+            It wasn't anything you did. Your account and data are safe. Try loading the
+            page again; if the problem continues, write to us and mention the reference
+            below.
           </p>
 
           {error.digest && (
             <div className="p-4 border border-editorial-border bg-white font-mono text-xs text-editorial-muted max-w-xl">
-              <span className="font-bold text-ink">INCIDENT DIGEST:</span> {error.digest}
+              <span className="font-bold text-ink">Reference:</span> {error.digest}
             </div>
           )}
 
           <div className="flex flex-wrap items-center gap-4 pt-4">
             <Button variant="primary" size="md" onClick={() => reset()}>
-              Reset System Context
+              Try again
             </Button>
             <Link href="/">
               <Button variant="outline" size="md">
-                Return to Campus Home
+                Go to home page
               </Button>
             </Link>
           </div>

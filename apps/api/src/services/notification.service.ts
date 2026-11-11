@@ -8,6 +8,8 @@ import {
   renderStatusChangedHtml,
   renderPaymentReceiptHtml,
   renderEnrolmentConfirmedHtml,
+  renderOfferLetterHtml,
+  renderCertificateIssuedHtml,
 } from "./emailTemplates.js";
 
 /**
@@ -41,6 +43,25 @@ async function enqueue(
 
 const frontendUrl = (path: string): string =>
   `${env.FRONTEND_URL.replace(/\/$/, "")}${path}`;
+
+/** "10 Dec 2026" (UTC, so the date never shifts with the server's timezone). */
+export function formatEmailDate(value: Date | string | null | undefined): string {
+  if (!value) return "To be announced";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "To be announced";
+  return date.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+const MODE_LABELS: Record<string, string> = {
+  REMOTE: "Remote",
+  HYBRID: "Hybrid",
+  ON_SITE: "On-site",
+};
 
 export function formatMoney(amountMinor: number, currency: string): string {
   const major = amountMinor / 100;
@@ -173,5 +194,76 @@ export const notificationService = {
       ),
       text: `Hi ${params.studentName},\n\nYour seat in ${params.programmeTitle} (${params.cohortCode}) is confirmed.\nStart date: ${startDateStr}\n\nYour dashboard: ${frontendUrl("/dashboard/student")}`,
     });
+  },
+
+  /** Internship offer letter, sent once a student's seat is confirmed. */
+  async sendOfferLetter(params: {
+    enrollmentId: string;
+    studentName: string;
+    studentEmail: string;
+    programmeTitle: string;
+    cohortName: string;
+    cohortCode: string;
+    startDate: Date | string;
+    endDate: Date | string;
+    durationWeeks: number;
+    mode?: string | null;
+  }) {
+    const letterUrl = frontendUrl(
+      `/dashboard/student/offer-letter/${encodeURIComponent(params.enrollmentId)}`
+    );
+    const startDateStr = formatEmailDate(params.startDate);
+    const endDateStr = formatEmailDate(params.endDate);
+    const mode = MODE_LABELS[params.mode || ""] || params.mode || "Remote";
+
+    await enqueue(
+      "OFFER_LETTER",
+      {
+        to: params.studentEmail,
+        subject: `Your internship offer letter: ${params.programmeTitle}`,
+        html: renderOfferLetterHtml({
+          studentName: params.studentName,
+          programmeTitle: params.programmeTitle,
+          cohortName: params.cohortName,
+          cohortCode: params.cohortCode,
+          startDateStr,
+          endDateStr,
+          durationWeeks: params.durationWeeks,
+          mode,
+          letterUrl,
+        }),
+        text: `Hi ${params.studentName},\n\nCongratulations! With your seat in ${params.programmeTitle} (${params.cohortCode}) confirmed, ByteHUB is pleased to offer you a live-project internship as part of the programme.\n\nStarts: ${startDateStr}\nEnds: ${endDateStr} (${params.durationWeeks} weeks)\nMode: ${mode}\n\nView and download your offer letter: ${letterUrl}`,
+      },
+      letterUrl
+    );
+  },
+
+  /** Certificate of completion, sent when an admin marks the enrolment completed. */
+  async sendCertificateIssued(params: {
+    studentName: string;
+    studentEmail: string;
+    programmeTitle: string;
+    cohortCode: string;
+    certificateCode: string;
+  }) {
+    const certificateUrl = frontendUrl(
+      `/verify/${encodeURIComponent(params.certificateCode)}`
+    );
+    await enqueue(
+      "CERTIFICATE_ISSUED",
+      {
+        to: params.studentEmail,
+        subject: `Your ByteHUB certificate: ${params.programmeTitle}`,
+        html: renderCertificateIssuedHtml({
+          studentName: params.studentName,
+          programmeTitle: params.programmeTitle,
+          cohortCode: params.cohortCode,
+          certificateCode: params.certificateCode,
+          certificateUrl,
+        }),
+        text: `Hi ${params.studentName},\n\nWell done on completing ${params.programmeTitle} (${params.cohortCode}). Your certificate is ready.\nCertificate ID: ${params.certificateCode}\n\nView, download and share it: ${certificateUrl}`,
+      },
+      certificateUrl
+    );
   },
 };

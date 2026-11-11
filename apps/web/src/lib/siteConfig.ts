@@ -50,6 +50,15 @@ export const siteConfig = {
   },
 
   /**
+   * Who signs internship offer letters and completion certificates. Replace with a person's
+   * name and title (e.g. "Sameer Akhtar", "Founder & Director") if you prefer.
+   */
+  documents: {
+    signatoryName: "Team ByteHUB",
+    signatoryTitle: "Programme Office",
+  },
+
+  /**
    * Refund rules for paid training programmes. These numbers appear on the Refund Policy and
    * should match how you actually process refunds in the admin panel.
    */

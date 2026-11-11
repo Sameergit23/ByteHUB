@@ -14,6 +14,7 @@ function pickEnum<T extends string>(
 import { authenticateJWT, requireRoles } from "../middleware/auth.js";
 import { generateBase32Secret, verifyTOTPCode } from "../utils/totp.js";
 import { AppError } from "../utils/apiError.js";
+import { certificateService } from "../services/certificate.service.js";
 
 export const adminRouter: Router = Router();
 
@@ -65,11 +66,9 @@ adminRouter.post(
 
     const isValid = verifyTOTPCode(code, secret);
     if (!isValid) {
-      res
-        .status(401)
-        .json({
-          error: { code: "INVALID_2FA_CODE", message: "Invalid or expired 2FA code." },
-        });
+      res.status(401).json({
+        error: { code: "INVALID_2FA_CODE", message: "Invalid or expired 2FA code." },
+      });
       return;
     }
 
@@ -314,6 +313,7 @@ adminRouter.get(
           cohort: {
             include: { programme: { select: { title: true } } },
           },
+          certificate: { select: { certificateCode: true, revokedAt: true } },
         },
         skip: (page - 1) * limit,
         take: limit,
@@ -328,6 +328,26 @@ adminRouter.get(
         meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
       },
     });
+  })
+);
+
+// Mark one student as completed: issues their certificate and emails it (once).
+adminRouter.post(
+  "/enrolments/:id/complete",
+  wrap(async (req: Request, res: Response): Promise<void> => {
+    const id = String(req.params.id || "");
+    const result = await certificateService.completeEnrollment(id, req.user?.id);
+    res.status(200).json({ status: "success", data: result });
+  })
+);
+
+// Mark every student with a confirmed seat in a cohort as completed.
+adminRouter.post(
+  "/cohorts/:id/complete",
+  wrap(async (req: Request, res: Response): Promise<void> => {
+    const id = String(req.params.id || "");
+    const summary = await certificateService.completeCohort(id, req.user?.id);
+    res.status(200).json({ status: "success", data: summary });
   })
 );
 

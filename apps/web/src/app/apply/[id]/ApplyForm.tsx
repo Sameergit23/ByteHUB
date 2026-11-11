@@ -17,8 +17,14 @@ import {
   ApiError,
   ApiEnvelope,
   StoredUser,
-  errorMessage,
 } from "../../../lib/api";
+import {
+  FormAlert,
+  describeError,
+  makeAlert,
+  validationAlert,
+  type AlertInfo,
+} from "../../../components/ui/FormAlert";
 
 /** Result shape shared by every step schema's safeParse(). */
 type StepValidation =
@@ -73,7 +79,9 @@ export function ApplyForm({ internship }: { internship: InternshipItem }) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [lastAutosaved, setLastAutosaved] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<AlertInfo | null>(null);
+  // Problems with the whole submission (wrong account type, server, network).
+  const [formAlert, setFormAlert] = useState<AlertInfo | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedApp, setSubmittedApp] = useState<{
     id: string;
@@ -141,7 +149,10 @@ export function ApplyForm({ internship }: { internship: InternshipItem }) {
 
     if (file.size > 5 * 1024 * 1024) {
       setUploadError(
-        "File exceeds 5 MB limit. Please select a smaller PDF or DOCX file."
+        validationAlert(
+          "Choose a PDF or Word (.docx) file under 5 MB.",
+          "This file is too large"
+        )
       );
       return;
     }
@@ -170,7 +181,10 @@ export function ApplyForm({ internship }: { internship: InternshipItem }) {
 
       if (!isPdf && !isDocx) {
         setUploadError(
-          "Invalid file signature. File is not a valid PDF or DOCX document (renamed extensions rejected)."
+          validationAlert(
+            "Upload a real PDF or Word (.docx) file. Renamed files are rejected.",
+            "This isn't a PDF or Word file"
+          )
         );
         setIsUploading(false);
         return;
@@ -207,7 +221,7 @@ export function ApplyForm({ internship }: { internship: InternshipItem }) {
       }
       handleFieldChange("resumeUrl", "");
       handleFieldChange("resumeFileName", "");
-      setUploadError(errorMessage(err, "Upload failed. Please try again."));
+      setUploadError(describeError(err, "Upload failed. Please try again."));
     } finally {
       setIsUploading(false);
     }
@@ -279,6 +293,7 @@ export function ApplyForm({ internship }: { internship: InternshipItem }) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateCurrentStep()) return;
+    setFormAlert(null);
 
     const currentUser = getStoredUser();
     if (!currentUser) {
@@ -286,9 +301,13 @@ export function ApplyForm({ internship }: { internship: InternshipItem }) {
       return;
     }
     if (currentUser.role === "COMPANY") {
-      setErrors({
-        form: "Company accounts cannot apply to internships. Sign in with a student account.",
-      });
+      setFormAlert(
+        makeAlert(
+          "forbidden",
+          "Company accounts can't apply",
+          "Sign in with a student account to apply for internships."
+        )
+      );
       return;
     }
 
@@ -337,9 +356,9 @@ export function ApplyForm({ internship }: { internship: InternshipItem }) {
         goToLogin();
         return;
       }
-      setErrors({
-        form: errorMessage(err, "Submission failed. Please verify all details."),
-      });
+      setFormAlert(
+        describeError(err, "Your application could not be sent. Please try again.")
+      );
       window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
       setIsSubmitting(false);
@@ -463,14 +482,7 @@ export function ApplyForm({ internship }: { internship: InternshipItem }) {
                 </div>
               )}
 
-              {errors.form && (
-                <div
-                  role="alert"
-                  className="p-3 border border-accent bg-[#FBEBE8] text-accent text-xs font-mono"
-                >
-                  [ ALERT ]: {errors.form}
-                </div>
-              )}
+              <FormAlert alert={formAlert} onDismiss={() => setFormAlert(null)} />
 
               {/* STEP 01: DETAILS */}
               {currentStep === 0 && (
@@ -649,11 +661,7 @@ export function ApplyForm({ internship }: { internship: InternshipItem }) {
                       </div>
                     )}
 
-                    {uploadError && (
-                      <div className="font-mono text-xs text-accent">
-                        [ ERROR ]: {uploadError}
-                      </div>
-                    )}
+                    <FormAlert alert={uploadError} />
                     {errors.resumeUrl && (
                       <div className="font-mono text-xs text-accent">
                         {errors.resumeUrl}

@@ -31,7 +31,7 @@ export function LegalPage({ eyebrow, title, intro, children }: LegalPageProps) {
           </div>
         )}
 
-        <header className="space-y-3">
+        <header className="hero-reveal space-y-3">
           <p className="text-xs sm:text-sm font-sans font-semibold text-accent">
             {eyebrow}
           </p>

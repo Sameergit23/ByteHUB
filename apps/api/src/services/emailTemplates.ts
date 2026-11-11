@@ -1,3 +1,20 @@
+import { env } from "../config/env.js";
+
+/** Public website address (no trailing slash), e.g. https://bytehubnet.com. */
+const SITE_URL = env.FRONTEND_URL.replace(/\/$/, "");
+/** Mailbox shown in footers: the address part of EMAIL_FROM ("ByteHUB <x@y>" -> x@y). */
+const SUPPORT_EMAIL = (env.EMAIL_FROM.match(/<([^>]+)>/)?.[1] ?? env.EMAIL_FROM).trim();
+
+/** Escapes text placed inside email HTML (names, titles typed by users). */
+export function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function baseLayout(
   title: string,
   contentHtml: string,
@@ -35,7 +52,7 @@ function baseLayout(
           <table role="presentation" class="email-container" width="600" cellpadding="0" cellspacing="0">
             <tr>
               <td class="header">
-                <a href="https://bytehub.dev" class="brand" style="text-decoration: none; font-weight: 800; font-size: 22px; letter-spacing: -0.5px;">
+                <a href="${SITE_URL}" class="brand" style="text-decoration: none; font-weight: 800; font-size: 22px; letter-spacing: -0.5px;">
                   <span style="color: #0A1128;">Byte</span><span style="color: #2563EB;">HUB</span>
                 </a>
                 <div class="tagline" style="font-family: monospace; font-size: 10px; letter-spacing: 2.5px; color: #5A574D; margin-top: 4px;">TRAIN. INTERN. LAUNCH.</div>
@@ -48,8 +65,8 @@ function baseLayout(
             </tr>
             <tr>
               <td class="footer">
-                <div>ByteHUB · Bangalore, India</div>
-                <div style="margin-top: 4px;">admissions@bytehub.dev · Security & Integrity SLA</div>
+                <div>ByteHUB · Indore, India</div>
+                <div style="margin-top: 4px;">${SUPPORT_EMAIL} · ${SITE_URL.replace(/^https?:\/\//, "")}</div>
                 ${
                   isNonEssential && unsubscribeUrl
                     ? `<div style="margin-top: 12px; border-top: 1px solid #D8D3C4; padding-top: 8px;">
@@ -96,7 +113,7 @@ export function renderResetPasswordHtml(
     <div style="margin: 24px 0;">
       <a href="${resetUrl}" class="btn" target="_blank">Set New Password →</a>
     </div>
-    <p class="notice">This password reset link expires in 1 hour and can only be used once. If you did not request a password reset, please change your credentials immediately or contact security@bytehub.dev.</p>
+    <p class="notice">This password reset link expires in 1 hour and can only be used once. If you did not request a password reset, please change your password straight away or contact ${SUPPORT_EMAIL}.</p>
   `;
   return baseLayout("Reset Your ByteHUB Password", content);
 }
@@ -117,7 +134,7 @@ export function renderApplicationReceivedHtml(
       <div style="margin-top: 4px;"><strong>Company:</strong> ${companyName}</div>
       <div style="margin-top: 4px;"><strong>Current Status:</strong> <span style="color: #16150F; font-weight: bold;">SUBMITTED</span></div>
     </div>
-    <p>You can track updates and withdrawal options directly from your <a href="https://bytehub.dev/dashboard/student" style="color: #B8341A; font-weight: 600;">Student Dashboard</a>.</p>
+    <p>You can track updates and withdrawal options directly from your <a href="${SITE_URL}/dashboard/student" style="color: #B8341A; font-weight: 600;">Student Dashboard</a>.</p>
   `;
   return baseLayout("Application Received - " + roleTitle, content);
 }
@@ -136,7 +153,7 @@ export function renderStatusChangedHtml(
       <strong>Updated Status:</strong> <span style="color: #B8341A; font-weight: bold;">${newStatus}</span>
     </div>
     <div style="margin: 20px 0;">
-      <a href="https://bytehub.dev/dashboard/student" class="btn" target="_blank">View in Student Dashboard →</a>
+      <a href="${SITE_URL}/dashboard/student" class="btn" target="_blank">View in Student Dashboard →</a>
     </div>
   `;
   return baseLayout("Application Status: " + newStatus, content);
@@ -162,7 +179,7 @@ export function renderPaymentReceiptHtml(
     </div>
     <p class="notice">Official Receipt / Bill of Supply — GST Exempt (Turnover below statutory threshold under Section 22 of the CGST Act, 2017).</p>
     <div style="margin: 20px 0;">
-      <a href="https://bytehub.dev/api/payments/${orderId}/invoice" class="btn" target="_blank">Download Payment Receipt (PDF) →</a>
+      <a href="${SITE_URL}/api/payments/${orderId}/invoice" class="btn" target="_blank">Download Payment Receipt (PDF) →</a>
     </div>
   `;
   return baseLayout("Payment Receipt: " + orderId, content);
@@ -185,7 +202,7 @@ export function renderEnrolmentConfirmedHtml(
       <div><strong>Curriculum Access:</strong> Unlocked in Student Dashboard</div>
     </div>
     <div style="margin: 24px 0;">
-      <a href="https://bytehub.dev/dashboard/student" class="btn" target="_blank">Go to Student Dashboard →</a>
+      <a href="${SITE_URL}/dashboard/student" class="btn" target="_blank">Go to Student Dashboard →</a>
     </div>
   `;
   return baseLayout("Enrolment Confirmed - " + programmeTitle, content);
@@ -204,8 +221,66 @@ export function renderMarketingDigestHtml(
       <li><strong>Systems & Distributed Intern</strong> — HyperGrid Labs (On-site · ₹45,000 / mo)</li>
     </ul>
     <div style="margin: 20px 0;">
-      <a href="https://bytehub.dev/internships" class="btn" target="_blank">Browse All Openings →</a>
+      <a href="${SITE_URL}/internships" class="btn" target="_blank">Browse All Openings →</a>
     </div>
   `;
   return baseLayout("Weekly Internship Digest", content, true, unsubscribeUrl);
+}
+
+export function renderOfferLetterHtml(params: {
+  studentName: string;
+  programmeTitle: string;
+  cohortName: string;
+  cohortCode: string;
+  startDateStr: string;
+  endDateStr: string;
+  durationWeeks: number;
+  mode: string;
+  letterUrl: string;
+}): string {
+  const name = escapeHtml(params.studentName);
+  const programme = escapeHtml(params.programmeTitle);
+  const content = `
+    <h1 style="font-size: 22px; font-weight: bold; margin-top: 0; margin-bottom: 12px; letter-spacing: -0.5px;">Your internship offer letter</h1>
+    <p>Hello ${name},</p>
+    <p>Congratulations! With your seat in <strong>${programme}</strong> confirmed, ByteHUB is pleased to offer you a live-project internship as part of the programme.</p>
+    <div style="background-color: #F5F2EA; border: 1px solid #D8D3C4; padding: 16px; margin: 20px 0; font-family: monospace; font-size: 12px; line-height: 1.8;">
+      <div><strong>Role:</strong> ${programme} Intern</div>
+      <div><strong>Cohort:</strong> ${escapeHtml(params.cohortName)} (${escapeHtml(params.cohortCode)})</div>
+      <div><strong>Starts:</strong> ${params.startDateStr}</div>
+      <div><strong>Ends:</strong> ${params.endDateStr} (${params.durationWeeks} weeks)</div>
+      <div><strong>Mode:</strong> ${escapeHtml(params.mode)}</div>
+    </div>
+    <p>Your formal offer letter is ready in your student dashboard. You can download it as a PDF from there.</p>
+    <div style="margin: 24px 0;">
+      <a href="${params.letterUrl}" class="btn" target="_blank">View your offer letter →</a>
+    </div>
+    <p class="notice">You will need to sign in to open the letter. Questions? Reply to this email or write to ${SUPPORT_EMAIL}.</p>
+  `;
+  return baseLayout("Internship offer letter - " + params.programmeTitle, content);
+}
+
+export function renderCertificateIssuedHtml(params: {
+  studentName: string;
+  programmeTitle: string;
+  cohortCode: string;
+  certificateCode: string;
+  certificateUrl: string;
+}): string {
+  const name = escapeHtml(params.studentName);
+  const programme = escapeHtml(params.programmeTitle);
+  const content = `
+    <h1 style="font-size: 22px; font-weight: bold; margin-top: 0; margin-bottom: 12px; letter-spacing: -0.5px;">Your certificate is ready</h1>
+    <p>Hello ${name},</p>
+    <p>Well done on completing <strong>${programme}</strong> (${escapeHtml(params.cohortCode)}). Your ByteHUB certificate of completion has been issued.</p>
+    <div style="background-color: #F5F2EA; border: 1px solid #D8D3C4; padding: 16px; margin: 20px 0; font-family: monospace; font-size: 12px; line-height: 1.8;">
+      <div><strong>Certificate ID:</strong> ${escapeHtml(params.certificateCode)}</div>
+      <div><strong>Programme:</strong> ${programme}</div>
+    </div>
+    <div style="margin: 24px 0;">
+      <a href="${params.certificateUrl}" class="btn" target="_blank">View and download certificate →</a>
+    </div>
+    <p class="notice">Share this link on your CV or LinkedIn. Anyone who opens it can confirm the certificate is genuine.</p>
+  `;
+  return baseLayout("Certificate issued - " + params.programmeTitle, content);
 }

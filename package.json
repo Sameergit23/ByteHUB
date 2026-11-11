@@ -27,7 +27,7 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md}\"",
     "typecheck": "pnpm run build:shared && node scripts/tools/ensure-prisma-client.mjs && pnpm --recursive run typecheck",
     "build:shared": "pnpm --filter @bytehub/shared build",
-    "prepare": "husky install"
+    "prepare": "husky"
   },
   "pnpm": {
     "overrides": {

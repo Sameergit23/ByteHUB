@@ -8,7 +8,8 @@ import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
 import { Textarea } from "../../components/ui/Textarea";
 import { ColophonFooter } from "../../components/layout/ColophonFooter";
-import { apiFetch, ApiError } from "../../lib/api";
+import { apiFetch } from "../../lib/api";
+import { FormAlert, describeError, type AlertInfo } from "../../components/ui/FormAlert";
 
 export default function CompaniesPage() {
   const [formData, setFormData] = useState({
@@ -29,6 +30,7 @@ export default function CompaniesPage() {
     message: string;
   } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [alert, setAlert] = useState<AlertInfo | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,6 +47,7 @@ export default function CompaniesPage() {
 
     setIsSubmitting(true);
     setStatus(null);
+    setAlert(null);
 
     try {
       // The inquiry is only reported as received once the server has stored it.
@@ -72,15 +75,12 @@ export default function CompaniesPage() {
         _hp: "",
       });
     } catch (err) {
-      setStatus({
-        success: false,
-        message:
-          err instanceof ApiError && err.status === 429
-            ? "Too many inquiries sent from this connection. Please wait 15 minutes before trying again."
-            : err instanceof ApiError && err.status === 400
-              ? err.message
-              : "Your inquiry could not be sent. Please try again in a moment.",
-      });
+      setAlert(
+        describeError(
+          err,
+          "Your inquiry could not be sent. Please try again in a moment."
+        )
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -90,7 +90,7 @@ export default function CompaniesPage() {
     <div className="w-full bg-canvas min-h-screen py-12 sm:py-16">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-16 sm:space-y-24">
         {/* Hero Section */}
-        <div className="space-y-4 max-w-3xl">
+        <div className="hero-reveal space-y-4 max-w-3xl">
           <p className="text-xs sm:text-sm font-sans font-semibold text-accent tracking-normal">
             For employers
           </p>
@@ -237,14 +237,7 @@ export default function CompaniesPage() {
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-6">
-                {status && !status.success && (
-                  <div
-                    role="alert"
-                    className="p-3 border border-accent bg-[#FBEBE8] text-accent text-xs font-mono"
-                  >
-                    [ ALERT ]: {status.message}
-                  </div>
-                )}
+                <FormAlert alert={alert} />
 
                 {/* Honeypot field (hidden from sighted users) */}
                 <input

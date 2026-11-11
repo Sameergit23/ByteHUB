@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from "react";
+import React, { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "../../components/ui/Button";
@@ -9,11 +9,17 @@ import { Input } from "../../components/ui/Input";
 import { ColophonFooter } from "../../components/layout/ColophonFooter";
 import { ByteHubLogo } from "../../components/brand/ByteHubLogo";
 import {
+  FormAlert,
+  describeError,
+  successAlert,
+  validationAlert,
+  type AlertInfo,
+} from "../../components/ui/FormAlert";
+import {
   setStoredUser,
   getStoredUser,
   clearAuth,
   apiFetch,
-  errorMessage,
   ApiEnvelope,
   StoredUser,
 } from "../../lib/api";
@@ -54,8 +60,9 @@ function AuthForm() {
     organizationName: "",
   });
 
-  const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [error, setError] = useState<AlertInfo | null>(null);
+  const [successMessage, setSuccessMessage] = useState<AlertInfo | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -117,11 +124,14 @@ function AuthForm() {
         });
 
         setSuccessMessage(
-          "If an account exists with that email address, a password reset link has been emailed to it. The link is valid for 1 hour."
+          successAlert(
+            "If an account exists with that email address, a password reset link is on its way. The link works for 1 hour.",
+            "Check your inbox"
+          )
         );
       } catch (err) {
         setError(
-          errorMessage(err, "Could not request a password reset. Please try again.")
+          describeError(err, "Could not request a password reset. Please try again.")
         );
       } finally {
         setLoading(false);
@@ -132,7 +142,7 @@ function AuthForm() {
     // Sign up complexity validation: min 10 chars, uppercase, lowercase, digit, special
     if (mode === "signup") {
       if (formData.password.length < 10) {
-        setError("Password must be at least 10 characters long.");
+        setError(validationAlert("Use at least 10 characters.", "Password is too short"));
         return;
       }
       if (
@@ -142,7 +152,10 @@ function AuthForm() {
         !/[^A-Za-z0-9]/.test(formData.password)
       ) {
         setError(
-          "Password must include uppercase, lowercase, digit, and special character."
+          validationAlert(
+            "Include an uppercase letter, a lowercase letter, a number and a symbol (e.g. !).",
+            "Password needs more variety"
+          )
         );
         return;
       }
@@ -190,7 +203,7 @@ function AuthForm() {
         router.refresh();
       }
     } catch (err) {
-      setError(errorMessage(err, "Authentication failed. Check credentials."));
+      setError(describeError(err, "Sign-in failed. Please try again."));
     } finally {
       setLoading(false);
     }
@@ -314,27 +327,13 @@ function AuthForm() {
           )}
 
           {/* Error Message */}
-          {error && (
-            <div
-              role="alert"
-              className="p-3 border border-accent bg-[#FBEBE8] text-accent text-xs font-mono"
-            >
-              [ ALERT ]: {error}
-            </div>
-          )}
+          <FormAlert alert={error} onRetry={() => formRef.current?.requestSubmit()} />
 
           {/* Success Message */}
-          {successMessage && (
-            <div
-              role="status"
-              className="p-3 border border-green-700 bg-green-50 text-green-950 text-xs font-mono"
-            >
-              [ CONFIRMED ]: {successMessage}
-            </div>
-          )}
+          <FormAlert alert={successMessage} />
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
             {mode === "signup" && (
               <>
                 <Input

@@ -7,7 +7,15 @@ import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
 import { ByteHubLogo } from "../../components/brand/ByteHubLogo";
-import { apiFetch, clearAuth, errorMessage } from "../../lib/api";
+import { apiFetch, clearAuth } from "../../lib/api";
+import {
+  FormAlert,
+  describeError,
+  makeAlert,
+  successAlert,
+  validationAlert,
+  type AlertInfo,
+} from "../../components/ui/FormAlert";
 
 function passwordProblem(password: string): string | null {
   if (password.length < 10) return "Password must be at least 10 characters long.";
@@ -22,13 +30,23 @@ function passwordProblem(password: string): string | null {
   return null;
 }
 
+const INCOMPLETE_LINK = makeAlert(
+  "notFound",
+  "This reset link is incomplete",
+  "Request a new one from the sign-in page."
+);
+const PASSWORD_UPDATED = successAlert(
+  "Sign in with your new password.",
+  "Your password has been updated"
+);
+
 function ResetPasswordForm() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token") || "";
 
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<AlertInfo | null>(null);
   const [done, setDone] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -38,11 +56,13 @@ function ResetPasswordForm() {
 
     const problem = passwordProblem(password);
     if (problem) {
-      setError(problem);
+      setError(validationAlert(problem, "Choose a stronger password"));
       return;
     }
     if (password !== confirm) {
-      setError("The two passwords do not match.");
+      setError(
+        validationAlert("Type the same password in both boxes.", "Passwords don't match")
+      );
       return;
     }
 
@@ -57,7 +77,7 @@ function ResetPasswordForm() {
       setDone(true);
     } catch (err) {
       setError(
-        errorMessage(err, "The password could not be reset. Please request a new link.")
+        describeError(err, "The password could not be reset. Please request a new link.")
       );
     } finally {
       setLoading(false);
@@ -83,13 +103,7 @@ function ResetPasswordForm() {
         <Card padding="lg" className="space-y-6">
           {!token ? (
             <div className="space-y-4">
-              <div
-                role="alert"
-                className="p-3 border border-accent bg-[#FBEBE8] text-accent text-xs font-mono"
-              >
-                [ ALERT ]: This reset link is incomplete. Request a new one from the
-                sign-in page.
-              </div>
+              <FormAlert alert={INCOMPLETE_LINK} />
               <Link
                 href="/auth?mode=login"
                 className="font-mono text-xs text-ink underline"
@@ -99,13 +113,7 @@ function ResetPasswordForm() {
             </div>
           ) : done ? (
             <div className="space-y-4">
-              <div
-                role="status"
-                className="p-3 border border-green-700 bg-green-50 text-green-950 text-xs font-mono"
-              >
-                [ CONFIRMED ]: Your password has been updated. Sign in with the new
-                password.
-              </div>
+              <FormAlert alert={PASSWORD_UPDATED} />
               <Link href="/auth?mode=login">
                 <Button variant="primary" fullWidth size="md">
                   Go to sign in
@@ -114,14 +122,7 @@ function ResetPasswordForm() {
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
-              {error && (
-                <div
-                  role="alert"
-                  className="p-3 border border-accent bg-[#FBEBE8] text-accent text-xs font-mono"
-                >
-                  [ ALERT ]: {error}
-                </div>
-              )}
+              <FormAlert alert={error} />
 
               <Input
                 label="New password (min 10 chars, upper, lower, num, symbol)"

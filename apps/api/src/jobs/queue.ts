@@ -5,6 +5,7 @@ import { trainingRepository } from "../repositories/training.repository.js";
 import { paymentService } from "../services/paymentService.js";
 import { prisma } from "../lib/prisma.js";
 import { AlertService } from "../services/alert.service.js";
+import { certificateService } from "../services/certificate.service.js";
 
 export type JobTypeName =
   | "SEND_EMAIL"
@@ -60,24 +61,10 @@ export class ByteHubJobQueue extends EventEmitter {
       return paymentService.reconcileNightly();
     });
 
-    // 4. Generate Certificate Job Handler
+    // 4. Generate Certificate Job Handler (same path as the admin "mark completed" action)
     this.registerHandler("GENERATE_CERTIFICATE", async (job) => {
-      const { enrollmentId, userId, title } = job.data as {
-        enrollmentId: string;
-        userId: string;
-        title: string;
-      };
-      const code = `BYTE-${new Date().getFullYear()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-
-      return prisma.certificate.create({
-        data: {
-          enrollmentId,
-          userId,
-          title,
-          certificateCode: code,
-          verificationUrl: `/verify/${code}`,
-        },
-      });
+      const { enrollmentId } = job.data as { enrollmentId: string };
+      return certificateService.completeEnrollment(enrollmentId, undefined);
     });
 
     // 5. Data Retention Cleanup Job Handler

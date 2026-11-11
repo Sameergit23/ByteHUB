@@ -3,6 +3,7 @@ import { Space_Grotesk, Inter } from "next/font/google";
 import "./globals.css";
 import { Header } from "../components/layout/Header";
 import { Footer } from "../components/layout/Footer";
+import { SiteChrome } from "../components/layout/SiteChrome";
 import { siteConfig } from "../lib/siteConfig";
 
 const spaceGrotesk = Space_Grotesk({
@@ -46,11 +47,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           Skip to main content
         </a>
 
-        <Header />
-        <main id="main-content" className="flex-1 focus:outline-none">
+        <SiteChrome header={<Header />} footer={<Footer />}>
           {children}
-        </main>
-        <Footer />
+        </SiteChrome>
       </body>
     </html>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { z } from "zod";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
@@ -8,7 +8,13 @@ import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
 import { Textarea } from "../../components/ui/Textarea";
 import { ColophonFooter } from "../../components/layout/ColophonFooter";
-import { apiFetch, ApiError } from "../../lib/api";
+import { apiFetch } from "../../lib/api";
+import {
+  FormAlert,
+  describeError,
+  makeAlert,
+  type AlertInfo,
+} from "../../components/ui/FormAlert";
 import { siteConfig } from "../../lib/siteConfig";
 
 // Zod validation contract for Contact form
@@ -42,23 +48,30 @@ export default function ContactPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [lastSubmittedAt, setLastSubmittedAt] = useState<number | null>(null);
   const [statusMessage, setStatusMessage] = useState<{
-    type: "success" | "error" | "rate_limit";
+    type: "success";
     text: string;
   } | null>(null);
+  // Problems sending (too fast, offline, server asleep, rejected input) show here.
+  const [alert, setAlert] = useState<AlertInfo | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors({});
     setStatusMessage(null);
+    setAlert(null);
 
     // Rate limiting guard: prevent multiple submissions within 30 seconds
     const now = Date.now();
     if (lastSubmittedAt && now - lastSubmittedAt < 30000) {
       const waitSeconds = Math.ceil((30000 - (now - lastSubmittedAt)) / 1000);
-      setStatusMessage({
-        type: "rate_limit",
-        text: `Rate limit reached. Please wait ${waitSeconds} seconds before submitting another inquiry.`,
-      });
+      setAlert(
+        makeAlert(
+          "rateLimit",
+          "Please wait a moment",
+          `You can send another message in ${waitSeconds} seconds.`
+        )
+      );
       return;
     }
 
@@ -110,20 +123,12 @@ export default function ContactPage() {
         _hp: "",
       });
     } catch (err) {
-      if (err instanceof ApiError && err.status === 429) {
-        setStatusMessage({
-          type: "rate_limit",
-          text: "Too many messages sent from this connection. Please wait 15 minutes before trying again.",
-        });
-      } else {
-        setStatusMessage({
-          type: "error",
-          text:
-            err instanceof ApiError && err.status === 400
-              ? err.message
-              : "Your message could not be sent. Please try again or email us directly.",
-        });
-      }
+      setAlert(
+        describeError(
+          err,
+          "Your message could not be sent. Please try again or email us directly."
+        )
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -133,7 +138,7 @@ export default function ContactPage() {
     <div className="w-full bg-canvas min-h-screen py-12 sm:py-16">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12 sm:space-y-16">
         {/* Header Eyebrow & Title */}
-        <div className="space-y-3">
+        <div className="hero-reveal space-y-3">
           <p className="text-xs sm:text-sm font-sans font-semibold text-accent tracking-normal">
             Get in touch
           </p>
@@ -169,15 +174,11 @@ export default function ContactPage() {
                   </button>
                 </div>
               ) : (
-                <form onSubmit={handleSubmit} className="space-y-6">
-                  {statusMessage?.type === "rate_limit" && (
-                    <div
-                      role="alert"
-                      className="p-4 border border-accent bg-[#FBEBE8] text-accent text-xs font-mono"
-                    >
-                      {statusMessage.text}
-                    </div>
-                  )}
+                <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
+                  <FormAlert
+                    alert={alert}
+                    onRetry={() => formRef.current?.requestSubmit()}
+                  />
 
                   {/* Honeypot field (hidden from screen readers & sighted users) */}
                   <input

@@ -33,6 +33,18 @@ hosting has no permanent disk.
 ## Pending — code (Claude)
 
 - [x] Store uploaded resumes in Supabase Storage instead of the server's disk (needed for free hosting)
+- [x] Admin panel redesigned as its own back office: sidebar, overview, approvals with review
+      panel, users, cohorts (edit seats), enrolments, payments/refunds, inbox, audit log, system
+      health (11 Nov 2026)
+- [x] Internship offer letter: emailed when a seat is confirmed (after payment), printable page
+      in the student dashboard (`/dashboard/student/offer-letter/<id>`)
+- [x] Certificates: admin marks a student (or a whole cohort) completed → certificate created and
+      emailed; public check page `bytehubnet.com/verify/<ID>`
+- [x] Page reveal animations, loaders, clear animated messages per error type, wake-up ping and
+      automatic retries while the free API wakes
+- [x] Wrong domains fixed: emails linked to bytehub.dev, share links/sitemap fallback to bytehub.io
+- [ ] Only if you ever add a **free** cohort: a "join for free" endpoint (paid cohorts work; the
+      API currently has no direct enrolment for price 0)
 
 ## Pending — setup (you)
 
@@ -62,6 +74,8 @@ hosting has no permanent disk.
 - [ ] Company posts an internship → admin approves → student applies with resume → company opens resume
 - [ ] Sandbox payment → seat confirmed, receipt email, appears in dashboard
 - [ ] Forgot password, contact form, refund from admin panel
+- [ ] After the sandbox payment: offer letter email arrives and the letter opens from the dashboard
+- [ ] Admin → Enrolments → Mark completed → certificate email arrives and `/verify/<ID>` shows it
 - [ ] Resume still opens after a redeploy
 
 ## Pending — real payments (Phase 8)
@@ -75,6 +89,8 @@ hosting has no permanent disk.
 ## Pending — before / at launch
 
 - [ ] Lawyer reviews Terms, Privacy and Refund pages → set `reviewed: true` in `apps/web/src/lib/siteConfig.ts`
+- [ ] Review the offer letter wording and who signs letters/certificates (`documents` in
+      `apps/web/src/lib/siteConfig.ts`, now "Team ByteHUB, Programme Office"), ideally with the lawyer
 - [ ] Add real internships (companies sign up and post; approve in `/admin`)
 - [ ] Check every cohort's price, dates and seats in Supabase (Cohort table; prices in paise)
 
@@ -87,4 +103,4 @@ hosting has no permanent disk.
 - [ ] Refunds through Cashfree's API (refunds are recorded in the admin panel but sent manually from the Cashfree dashboard for now)
 - [ ] Rewrite the Playwright browser tests for the live data
 - [ ] Optional: Google Workspace DKIM record (better delivery for emails sent from Workspace)
-- [ ] Remove the two deprecated lines at the top of `.husky/pre-commit` (they break in Husky v10)
+- [x] Remove the two deprecated lines at the top of `.husky/pre-commit` (they break in Husky v10)

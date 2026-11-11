@@ -38,15 +38,76 @@ body {
   outline-offset: 2px !important;
 }
 
+/* Admin console: the dark sidebar needs a light focus ring to stay visible */
+.admin-sidebar :focus-visible {
+  outline: 2px solid #ffffff !important;
+  outline-offset: -2px !important;
+}
+
+.admin-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #3f3f46 transparent;
+}
+
+/* Hero reveal: a page's eyebrow, headline, intro and buttons rise in one after another.
+   Ends on transform: none so nothing is left transformed afterwards. */
+@keyframes hero-reveal-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.hero-reveal > * {
+  animation: hero-reveal-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.hero-reveal > *:nth-child(2) {
+  animation-delay: 0.08s;
+}
+.hero-reveal > *:nth-child(3) {
+  animation-delay: 0.16s;
+}
+.hero-reveal > *:nth-child(4) {
+  animation-delay: 0.24s;
+}
+.hero-reveal > *:nth-child(5) {
+  animation-delay: 0.32s;
+}
+.hero-reveal > *:nth-child(n + 6) {
+  animation-delay: 0.4s;
+}
+
 /* Reduced Motion Support */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* Printing (offer letters, certificates, receipts): only the page content, in full colour */
+@media print {
+  body > header,
+  body > footer,
+  body > a[href="#main-content"] {
+    display: none !important;
+  }
+  html,
+  body {
+    background: #ffffff !important;
+  }
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 }
 

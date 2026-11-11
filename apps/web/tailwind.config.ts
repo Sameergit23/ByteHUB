@@ -73,6 +73,53 @@ const config: Config = {
         "24": "96px",
         "32": "128px",
       },
+      // Motion: every entrance ends on `transform: none`, so no lasting transform is left behind
+      // (a leftover transform would break position: fixed dialogs inside the element).
+      // prefers-reduced-motion users get these at ~0s via globals.css.
+      keyframes: {
+        "reveal-up": {
+          from: { opacity: "0", transform: "translateY(14px)" },
+          to: { opacity: "1", transform: "none" },
+        },
+        "fade-in": { from: { opacity: "0" }, to: { opacity: "1" } },
+        "alert-in": {
+          from: { opacity: "0", transform: "translateY(-6px)" },
+          to: { opacity: "1", transform: "none" },
+        },
+        shake: {
+          "0%, 100%": { transform: "none" },
+          "15%, 55%": { transform: "translateX(-6px)" },
+          "35%, 75%": { transform: "translateX(6px)" },
+        },
+        "alert-pop": {
+          "0%": { opacity: "0", transform: "scale(0.96)" },
+          "60%": { opacity: "1", transform: "scale(1.01)" },
+          "100%": { opacity: "1", transform: "none" },
+        },
+        "loader-bar": {
+          "0%": { transform: "translateX(-100%)" },
+          "100%": { transform: "translateX(250%)" },
+        },
+        "node-blink": { "0%, 100%": { opacity: "0.25" }, "40%": { opacity: "1" } },
+        "hub-pulse": {
+          "0%, 100%": { transform: "scale(0.85)" },
+          "50%": { transform: "scale(1.05)" },
+        },
+      },
+      animation: {
+        reveal: "reveal-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both",
+        "page-in": "reveal-up 0.45s cubic-bezier(0.22, 1, 0.36, 1) both",
+        // Step-to-step transitions in multi-step forms (e.g. the internship application)
+        fadeIn: "reveal-up 0.45s cubic-bezier(0.22, 1, 0.36, 1) both",
+        "fade-in": "fade-in 0.4s ease-out both",
+        "alert-in": "alert-in 0.28s ease-out both",
+        "alert-shake": "alert-in 0.28s ease-out both, shake 0.42s ease-in-out 0.28s",
+        "alert-pop": "alert-pop 0.35s ease-out both",
+        shake: "shake 0.42s ease-in-out",
+        "loader-bar": "loader-bar 1.2s ease-in-out infinite",
+        "node-blink": "node-blink 1.2s ease-in-out infinite",
+        "hub-pulse": "hub-pulse 1.2s ease-in-out infinite",
+      },
       minHeight: {
         touch: "44px",
       },

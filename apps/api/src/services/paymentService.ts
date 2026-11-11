@@ -237,6 +237,32 @@ export class PaymentService {
         startDate: payment.cohort?.startDate,
         mode: payment.cohort?.mode,
       });
+
+      // The seat is now confirmed, so the internship offer letter goes out with the receipt.
+      if (payment.cohort) {
+        const enrollment = await prisma.enrollment.findFirst({
+          where: {
+            userId: payment.userId,
+            cohortId: payment.cohort.id,
+            status: { in: ["ACTIVE", "COMPLETED"] },
+          },
+          select: { id: true },
+        });
+        if (enrollment) {
+          await notificationService.sendOfferLetter({
+            enrollmentId: enrollment.id,
+            studentName: payment.user.name,
+            studentEmail: payment.user.email,
+            programmeTitle: payment.cohort.programme?.title || "Training Programme",
+            cohortName: payment.cohort.name,
+            cohortCode: payment.cohort.cohortCode,
+            startDate: payment.cohort.startDate,
+            endDate: payment.cohort.endDate,
+            durationWeeks: payment.cohort.durationWeeks,
+            mode: payment.cohort.mode,
+          });
+        }
+      }
     } catch (err) {
       logger.error({ err, orderId }, "Failed to send payment confirmation emails");
     }

@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Chip } from "../../components/ui/Chip";
+import { FormAlert } from "../../components/ui/FormAlert";
 import { Button } from "../../components/ui/Button";
 import { ColophonFooter } from "../../components/layout/ColophonFooter";
 import { getInternships } from "../../lib/catalog";
+import { siteConfig } from "../../lib/siteConfig";
 
 export const metadata: Metadata = {
   title: "Open Internships — ByteHUB",
@@ -13,7 +15,7 @@ export const metadata: Metadata = {
     title: "Open Internships — ByteHUB",
     description:
       "Apply to live projects with mentors. Complete training first to improve your chances.",
-    url: "https://bytehub.io/internships",
+    url: `${siteConfig.siteUrl}/internships`,
   },
 };
 
@@ -66,7 +68,7 @@ export default async function InternshipsPage({
     <div className="w-full bg-canvas min-h-screen py-12 sm:py-16">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
         {/* Page Title & Subtitle Matching Image 3 */}
-        <div className="space-y-3">
+        <div className="hero-reveal space-y-3">
           <h1 className="font-heading text-4xl sm:text-5xl font-bold tracking-tight text-ink">
             Open internships
           </h1>
@@ -192,13 +194,15 @@ export default async function InternshipsPage({
         </div>
 
         {isUnavailable && (
-          <div
-            role="alert"
-            className="p-4 border border-accent bg-[#FBEBE8] text-accent text-xs font-mono"
-          >
-            [ NOTICE ]: Listings could not be loaded right now. Please refresh in a
-            moment.
-          </div>
+          <FormAlert
+            alert={{
+              kind: "waking",
+              title: "Internships couldn't load just now",
+              message:
+                "Our server may be waking up after a quiet spell. Refresh the page in a few seconds.",
+              id: 1,
+            }}
+          />
         )}
 
         {!isUnavailable && filtered.length === 0 && (

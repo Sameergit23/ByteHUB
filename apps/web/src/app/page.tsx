@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Button } from "../components/ui/Button";
 import { Card, CardTitle } from "../components/ui/Card";
 import { ColophonFooter } from "../components/layout/ColophonFooter";
+import { siteConfig } from "../lib/siteConfig";
 
 export const metadata: Metadata = {
   title: "ByteHUB — Real projects. Real mentors. Your first step into tech.",
@@ -12,7 +13,7 @@ export const metadata: Metadata = {
     title: "ByteHUB — Real projects. Real mentors. Your first step into tech.",
     description:
       "Learn a skill in a guided training programme, then prove it on a live internship project.",
-    url: "https://bytehub.io",
+    url: siteConfig.siteUrl,
     siteName: "ByteHUB",
     images: [{ url: "/og-image.png", width: 1200, height: 630 }],
     locale: "en_US",
@@ -72,7 +73,7 @@ export default function HomePage() {
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-20 lg:py-24">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-14 items-start">
           {/* Left Column: Eyebrow, Main Heading, Lead text, Buttons */}
-          <div className="lg:col-span-7 space-y-6">
+          <div className="hero-reveal lg:col-span-7 space-y-6">
             <p className="text-xs sm:text-sm font-sans font-semibold text-accent tracking-normal">
               Internships and training for students
             </p>

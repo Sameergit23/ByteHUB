@@ -1,11 +1,12 @@
 import { MetadataRoute } from "next";
 import { getInternships, getProgrammes } from "../lib/catalog";
+import { siteConfig } from "../lib/siteConfig";
 
 // Rebuilt hourly so new internships and programmes appear without a redeploy.
 export const revalidate = 3600;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://bytehub.io";
+  const baseUrl = siteConfig.siteUrl;
   const now = new Date();
 
   // Static routes

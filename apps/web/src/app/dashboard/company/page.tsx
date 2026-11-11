@@ -9,6 +9,14 @@ import {
   redirectToLogin,
   StoredUser,
 } from "../../../lib/api";
+import {
+  FormAlert,
+  describeError,
+  successAlert,
+  validationAlert,
+  type AlertInfo,
+} from "../../../components/ui/FormAlert";
+import { PageLoader } from "../../../components/ui/Loader";
 import { formatDate, formatStipend, formatWorkMode } from "../../../lib/format";
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- API payloads are mapped field by field below */
@@ -71,16 +79,13 @@ export default function CompanyDashboardPage() {
   const [applicants, setApplicants] = useState<Applicant[]>([]);
   const [listingFilter, setListingFilter] = useState<string>("ALL");
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<{
-    type: "success" | "error";
-    text: string;
-  } | null>(null);
+  const [loadError, setLoadError] = useState<AlertInfo | null>(null);
+  const [notice, setNotice] = useState<AlertInfo | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   // Post form state
   const [posting, setPosting] = useState(emptyPosting);
-  const [formError, setFormError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<AlertInfo | null>(null);
   const [isPosting, setIsPosting] = useState(false);
 
   const load = useCallback(async () => {
@@ -124,9 +129,7 @@ export default function CompanyDashboardPage() {
         return;
       }
       setLoadError(
-        err instanceof Error
-          ? err.message
-          : "Your dashboard could not be loaded. Please retry."
+        describeError(err, "Your dashboard could not be loaded. Please retry.")
       );
     } finally {
       setLoading(false);
@@ -152,15 +155,13 @@ export default function CompanyDashboardPage() {
       setApplicants((prev) =>
         prev.map((a) => (a.id === appId ? { ...a, status: newStatus } : a))
       );
-      setNotice({
-        type: "success",
-        text: "Candidate status updated. The candidate has been notified by email.",
-      });
+      setNotice(
+        successAlert(
+          "Candidate status updated. The candidate has been notified by email."
+        )
+      );
     } catch (err: any) {
-      setNotice({
-        type: "error",
-        text: err?.message || "The status could not be updated.",
-      });
+      setNotice(describeError(err, "The status could not be updated."));
     } finally {
       setBusyId(null);
     }
@@ -185,10 +186,7 @@ export default function CompanyDashboardPage() {
       }
     } catch (err: any) {
       tab?.close();
-      setNotice({
-        type: "error",
-        text: err?.message || "The resume could not be opened.",
-      });
+      setNotice(describeError(err, "The resume could not be opened."));
     } finally {
       setBusyId(null);
     }
@@ -204,19 +202,19 @@ export default function CompanyDashboardPage() {
     const stipend = parseInt(posting.stipend || "0", 10);
 
     if (posting.description.trim().length < 50) {
-      setFormError("Describe the role in at least 50 characters.");
+      setFormError(validationAlert("Describe the role in at least 50 characters."));
       return;
     }
     if (requirements.length === 0 || skills.length === 0) {
-      setFormError("Add at least one requirement and one skill.");
+      setFormError(validationAlert("Add at least one requirement and one skill."));
       return;
     }
     if (!posting.deadline || new Date(posting.deadline).getTime() <= Date.now()) {
-      setFormError("Choose an application deadline in the future.");
+      setFormError(validationAlert("Choose an application deadline in the future."));
       return;
     }
     if (Number.isNaN(stipend) || stipend < 0) {
-      setFormError("Stipend must be 0 or a positive amount in INR.");
+      setFormError(validationAlert("Stipend must be 0 or a positive amount in INR."));
       return;
     }
 
@@ -243,10 +241,11 @@ export default function CompanyDashboardPage() {
       });
 
       setPosting(emptyPosting);
-      setNotice({
-        type: "success",
-        text: "Internship submitted. It goes live once the ByteHUB team approves it.",
-      });
+      setNotice(
+        successAlert(
+          "Internship submitted. It goes live once the ByteHUB team approves it."
+        )
+      );
       await load();
       setActiveTab("listings");
     } catch (err: any) {
@@ -255,7 +254,10 @@ export default function CompanyDashboardPage() {
         return;
       }
       setFormError(
-        err?.message || "The internship could not be submitted. Please check the form."
+        describeError(
+          err,
+          "The internship could not be submitted. Please check the form."
+        )
       );
     } finally {
       setIsPosting(false);
@@ -356,38 +358,11 @@ export default function CompanyDashboardPage() {
         </button>
       }
     >
-      {notice && (
-        <div
-          role={notice.type === "error" ? "alert" : "status"}
-          className={`mb-6 p-3 border text-xs ${
-            notice.type === "error"
-              ? "bg-red-50 border-red-200 text-red-700"
-              : "bg-green-50 border-green-200 text-green-800"
-          }`}
-        >
-          {notice.text}
-        </div>
-      )}
+      <FormAlert alert={notice} onDismiss={() => setNotice(null)} className="mb-6" />
 
-      {loading && (
-        <p className="font-mono text-xs text-[#5A574D]">Loading your dashboard...</p>
-      )}
+      {loading && <PageLoader label="Loading your dashboard…" />}
 
-      {!loading && loadError && (
-        <div
-          role="alert"
-          className="p-4 bg-red-50 border border-red-200 text-red-700 text-sm space-y-3"
-        >
-          <p>{loadError}</p>
-          <button
-            type="button"
-            onClick={() => void load()}
-            className="px-3 py-1.5 border border-red-700 text-xs font-mono"
-          >
-            Retry
-          </button>
-        </div>
-      )}
+      {!loading && <FormAlert alert={loadError} onRetry={() => void load()} />}
 
       {/* =================================================================== */}
       {/* TAB 1: OVERVIEW                                                     */}
@@ -583,14 +558,7 @@ export default function CompanyDashboardPage() {
             </p>
           </div>
 
-          {formError && (
-            <div
-              role="alert"
-              className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs"
-            >
-              {formError}
-            </div>
-          )}
+          <FormAlert alert={formError} />
 
           <form onSubmit={handleCreatePosting} className="space-y-4 text-xs">
             <div>

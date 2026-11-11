@@ -1,4 +1,5 @@
 import React, { forwardRef } from "react";
+import { Spinner } from "./Loader";
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: "primary" | "outline" | "text";
@@ -48,12 +49,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         } ${className}`}
         {...props}
       >
-        {isLoading && (
-          <span
-            className="inline-block w-4 h-4 mr-2 border-2 border-current border-t-transparent rounded-full animate-spin"
-            aria-hidden="true"
-          />
-        )}
+        {isLoading && <Spinner className="mr-2 h-4 w-4" />}
         {children}
       </button>
     );

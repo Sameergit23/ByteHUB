@@ -13,23 +13,23 @@ export default function NotFound() {
             <ByteHubLogo variant="light" size="sm" />
           </Link>
           <span className="font-mono text-xs uppercase tracking-widest text-editorial-muted">
-            ERROR CODE: 404_PAGE_NOT_FOUND
+            Error 404
           </span>
         </div>
 
         {/* Hero Section */}
-        <div className="py-16 sm:py-24 space-y-6">
+        <div className="hero-reveal py-16 sm:py-24 space-y-6">
           <div className="inline-block border border-accent bg-[#B8341A]/10 text-accent px-3 py-1 font-mono text-xs font-bold uppercase tracking-wider">
-            Index Reference Lost
+            Page not found
           </div>
 
           <h1 className="font-heading text-4xl sm:text-6xl font-bold text-ink tracking-tight leading-none">
-            The requested dossier does not exist in our system registry.
+            We couldn't find that page.
           </h1>
 
           <p className="font-sans text-base sm:text-lg text-editorial-muted max-w-2xl leading-relaxed">
-            The link you followed may have been decommissioned, updated to a newer cohort
-            slug, or moved during system re-indexing.
+            The link may be old or mistyped, or the page has moved. These are good places
+            to continue:
           </p>
 
           {/* Quick Directory Grid */}
@@ -39,13 +39,13 @@ export default function NotFound() {
               className="p-5 border border-editorial-border bg-white hover:border-ink hover:shadow-sm transition-all group"
             >
               <div className="font-mono text-[10px] text-editorial-muted uppercase tracking-widest">
-                DIRECTORY 01
+                Home
               </div>
               <div className="font-heading font-bold text-base text-ink mt-2 group-hover:text-accent">
-                Platform Overview →
+                ByteHUB home →
               </div>
               <p className="text-xs text-editorial-muted mt-1">
-                Return to the main campus homepage.
+                Start from the main page.
               </p>
             </Link>
 
@@ -54,10 +54,10 @@ export default function NotFound() {
               className="p-5 border border-editorial-border bg-white hover:border-ink hover:shadow-sm transition-all group"
             >
               <div className="font-mono text-[10px] text-editorial-muted uppercase tracking-widest">
-                DIRECTORY 02
+                Internships
               </div>
               <div className="font-heading font-bold text-base text-ink mt-2 group-hover:text-accent">
-                Verified Internships →
+                Browse internships →
               </div>
               <p className="text-xs text-editorial-muted mt-1">
                 Explore open positions with verified stipends.
@@ -69,13 +69,13 @@ export default function NotFound() {
               className="p-5 border border-editorial-border bg-white hover:border-ink hover:shadow-sm transition-all group"
             >
               <div className="font-mono text-[10px] text-editorial-muted uppercase tracking-widest">
-                DIRECTORY 03
+                Training
               </div>
               <div className="font-heading font-bold text-base text-ink mt-2 group-hover:text-accent">
-                Training Programmes →
+                Training programmes →
               </div>
               <p className="text-xs text-editorial-muted mt-1">
-                Join live engineering cohorts.
+                Learn a skill in a live cohort.
               </p>
             </Link>
           </div>

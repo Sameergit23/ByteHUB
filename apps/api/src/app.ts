@@ -18,6 +18,7 @@ import { applicationsRouter } from "./routes/applications.routes.js";
 import { paymentsRouter } from "./routes/payments.routes.js";
 import { adminRouter } from "./routes/admin.routes.js";
 import { contactRouter, inquiriesRouter } from "./routes/contact.routes.js";
+import { certificatesRouter } from "./routes/certificates.routes.js";
 
 export const createApp = (): Express => {
   const app = express();
@@ -175,6 +176,7 @@ export const createApp = (): Express => {
   app.use("/api/admin", adminRouter);
   app.use("/api/contact", contactRouter);
   app.use("/api/inquiries", inquiriesRouter);
+  app.use("/api/certificates", certificatesRouter);
 
   // 11. Route Not Found (404)
   app.use((_req, res) => {

@@ -7,6 +7,7 @@ import { Card, CardTitle } from "../../../components/ui/Card";
 import { ColophonFooter } from "../../../components/layout/ColophonFooter";
 import { CourseJsonLd } from "../../../components/seo/CourseJsonLd";
 import { getProgramme } from "../../../lib/catalog";
+import { siteConfig } from "../../../lib/siteConfig";
 
 export async function generateMetadata({
   params,
@@ -25,7 +26,7 @@ export async function generateMetadata({
     openGraph: {
       title: `${program.title} — ByteHUB`,
       description: program.description,
-      url: `https://bytehub.io/training/${program.slug}`,
+      url: `${siteConfig.siteUrl}/training/${program.slug}`,
       siteName: "ByteHUB",
       type: "article",
     },
@@ -61,7 +62,7 @@ export default async function TrainingDetailPage({
           description: program.description,
           provider: {
             name: "ByteHUB",
-            sameAs: "https://bytehub.io",
+            sameAs: siteConfig.siteUrl,
           },
           courseCode: program.id,
           hasCourseInstance: {
@@ -83,7 +84,7 @@ export default async function TrainingDetailPage({
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10">
         {/* Header Eyebrow & Title Matching Image 4 / Detail Pattern */}
-        <div className="space-y-4">
+        <div className="hero-reveal space-y-4">
           <p className="text-xs sm:text-sm font-sans font-semibold text-accent tracking-normal">
             Training programme
           </p>

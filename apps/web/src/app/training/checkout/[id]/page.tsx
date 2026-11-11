@@ -7,6 +7,13 @@ import { apiFetch, ApiError, getStoredUser, redirectToLogin } from "../../../../
 import { formatDate, formatMoney } from "../../../../lib/format";
 import { ByteHubLogo } from "../../../../components/brand/ByteHubLogo";
 import { siteConfig } from "../../../../lib/siteConfig";
+import {
+  FormAlert,
+  describeError,
+  makeAlert,
+  type AlertInfo,
+} from "../../../../components/ui/FormAlert";
+import { Spinner } from "../../../../components/ui/Loader";
 
 interface CohortSummary {
   id: string;
@@ -69,6 +76,12 @@ function loadCashfreeSdk(): Promise<any | null> {
 const newIdempotencyKey = () =>
   `bh_pay_${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Date.now()}`;
 
+const COHORT_LOAD_FAILED = makeAlert(
+  "waking",
+  "Couldn't load this programme yet",
+  "Our server may be waking up. Try again in a few seconds."
+);
+
 export default function TrainingCheckoutPage() {
   const params = useParams();
   const cohortId = (params?.id as string) || "";
@@ -82,7 +95,7 @@ export default function TrainingCheckoutPage() {
   const [order, setOrder] = useState<PaymentOrder | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatusResponse | null>(null);
   const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [payAlert, setPayAlert] = useState<AlertInfo | null>(null);
   const [secondsRemaining, setSecondsRemaining] = useState<number | null>(null);
 
   // One key per payment attempt: repeating the request (double click, retry after closing the
@@ -173,14 +186,18 @@ export default function TrainingCheckoutPage() {
       return;
     }
     if (user.role === "COMPANY") {
-      setErrorMessage(
-        "Company accounts cannot enrol in training. Sign in with a student account."
+      setPayAlert(
+        makeAlert(
+          "forbidden",
+          "Company accounts can't enrol",
+          "Sign in with a student account to join a training programme."
+        )
       );
       return;
     }
 
     setIsProcessing(true);
-    setErrorMessage(null);
+    setPayAlert(null);
 
     try {
       // 1. The server reserves the seat and decides the amount from its own database.
@@ -211,7 +228,9 @@ export default function TrainingCheckoutPage() {
       if (orderData.isTestMode) {
         const paid = await confirmWithServer(orderData.orderId);
         if (!paid)
-          setErrorMessage("The test payment could not be confirmed. Please retry.");
+          setPayAlert(
+            makeAlert("payment", "Test payment not confirmed", "Please try again.")
+          );
         return;
       }
 
@@ -241,10 +260,12 @@ export default function TrainingCheckoutPage() {
       // 4. Whatever the window reports, the server has the final say.
       const paid = await confirmWithServer(orderData.orderId);
       if (!paid) {
-        setErrorMessage(
-          result?.error?.message
-            ? `Payment was not completed: ${result.error.message}`
-            : "Payment was not completed. No money has been taken — you can try again while your seat is held."
+        setPayAlert(
+          makeAlert(
+            "payment",
+            "Payment not completed",
+            `${result?.error?.message ? `${result.error.message}. ` : ""}No money has been taken. You can try again while your seat is held.`
+          )
         );
       }
     } catch (err: any) {
@@ -254,7 +275,9 @@ export default function TrainingCheckoutPage() {
       }
       // A fresh key lets the next click start a clean attempt after a hard failure.
       idempotencyKey.current = newIdempotencyKey();
-      setErrorMessage(err?.message || "Failed to initiate payment. Please retry.");
+      setPayAlert(
+        describeError(err, "The payment could not be started. Please try again.")
+      );
     } finally {
       setIsProcessing(false);
     }
@@ -313,12 +336,10 @@ export default function TrainingCheckoutPage() {
         )}
 
         {loadState === "error" && (
-          <div
-            role="alert"
-            className="p-4 bg-red-50 border border-red-200 text-red-700 text-sm"
-          >
-            Cohort details could not be loaded. Please refresh the page in a moment.
-          </div>
+          <FormAlert
+            alert={COHORT_LOAD_FAILED}
+            onRetry={() => window.location.reload()}
+          />
         )}
 
         {loadState === "ready" && cohort && paymentStatus?.isPaid && (
@@ -497,18 +518,11 @@ export default function TrainingCheckoutPage() {
                   </div>
                 </div>
 
-                {errorMessage && (
-                  <div
-                    role="alert"
-                    className="mt-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs"
-                  >
-                    {errorMessage}
-                  </div>
-                )}
+                <FormAlert alert={payAlert} className="mt-4" />
 
                 {awaitingConfirmation && (
                   <div className="mt-4 p-3 bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center gap-2">
-                    <span className="animate-spin inline-block w-3 h-3 border-2 border-amber-800 border-t-transparent rounded-full" />
+                    <Spinner className="h-3.5 w-3.5" />
                     <span>Confirming your payment with the gateway...</span>
                   </div>
                 )}
