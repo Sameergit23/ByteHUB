@@ -7,7 +7,7 @@ import { ByteHubLogo } from "../brand/ByteHubLogo";
 import { getStoredUser, logout, StoredUser } from "../../lib/api";
 
 function dashboardFor(role: StoredUser["role"]): string {
-  if (role === "ADMIN") return "/admin";
+  if (role === "ADMIN") return "/dashboard";
   if (role === "COMPANY") return "/dashboard/company";
   return "/dashboard/student";
 }

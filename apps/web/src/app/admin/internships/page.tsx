@@ -68,7 +68,7 @@ const EMPTY_TEXT: Record<Filter, { title: string; description: string }> = {
 };
 
 export default function AdminInternshipsPage() {
-  const { refreshSummary, notify } = useAdmin();
+  const { refreshSummary, notify, href: adminHref } = useAdmin();
   const [filter, setFilter] = useState<Filter>("PUBLISHED");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<AdminInternship | null>(null);
@@ -115,7 +115,7 @@ export default function AdminInternshipsPage() {
   };
 
   const applicantsHref = (i: AdminInternship) =>
-    `/admin/applications?internship=${encodeURIComponent(i.id)}`;
+    adminHref(`/applications?internship=${encodeURIComponent(i.id)}`);
 
   // On a single-status tab every row has the same status, so the column only shows on "All".
   const allColumns: (Column<AdminInternship> & { show?: boolean })[] = [

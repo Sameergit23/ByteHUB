@@ -18,10 +18,15 @@ function pickEnum<T extends string>(
     ? (value as T)
     : undefined;
 }
-import { authenticateJWT, requireRoles } from "../middleware/auth.js";
-import { generateBase32Secret, verifyTOTPCode } from "../utils/totp.js";
+import { authenticateJWT } from "../middleware/auth.js";
+import {
+  requireAnyPermission,
+  requirePermission,
+  requireStaff,
+} from "../middleware/staff.js";
 import { AppError } from "../utils/apiError.js";
 import { certificateService } from "../services/certificate.service.js";
+import { adminPeopleRouter } from "./adminPeople.routes.js";
 
 export const adminRouter: Router = Router();
 
@@ -34,67 +39,20 @@ const wrap =
     handler(req, res).catch(next);
   };
 
-// Protect all admin routes with JWT and ADMIN role check
-adminRouter.use(authenticateJWT, requireRoles("ADMIN"));
+// Every admin route: signed in, staff, not blocked, two-factor done. Each route below also
+// checks the specific permission, so a hidden button is never the only protection.
+adminRouter.use(authenticateJWT, requireStaff());
+
+// Users, staff and roles & permissions (see adminPeople.routes.ts).
+adminRouter.use(adminPeopleRouter);
 
 // ---------------------------------------------------------------------------
-// 1. Admin 2FA (TOTP)
-// ---------------------------------------------------------------------------
-
-adminRouter.post(
-  "/2fa/setup",
-  wrap(async (req: Request, res: Response): Promise<void> => {
-    const adminEmail = req.user?.email || "admin@bytehub.dev";
-    const secret = generateBase32Secret(20);
-    const otpauthUri = `otpauth://totp/ByteHUB:${encodeURIComponent(adminEmail)}?secret=${secret}&issuer=ByteHUB&algorithm=SHA1&digits=6&period=30`;
-
-    res.status(200).json({
-      status: "success",
-      data: {
-        secret,
-        otpauthUri,
-        message:
-          "Add this secret to your Authenticator app (Google Authenticator, 1Password, Authy).",
-      },
-    });
-  })
-);
-
-adminRouter.post(
-  "/2fa/verify",
-  wrap(async (req: Request, res: Response): Promise<void> => {
-    const { code, secret } = req.body;
-    if (!code || !secret) {
-      res
-        .status(400)
-        .json({ error: { code: "BAD_REQUEST", message: "Code and secret required." } });
-      return;
-    }
-
-    const isValid = verifyTOTPCode(code, secret);
-    if (!isValid) {
-      res.status(401).json({
-        error: { code: "INVALID_2FA_CODE", message: "Invalid or expired 2FA code." },
-      });
-      return;
-    }
-
-    res.status(200).json({
-      status: "success",
-      data: {
-        verified: true,
-        message: "Admin 2FA code verified successfully.",
-      },
-    });
-  })
-);
-
-// ---------------------------------------------------------------------------
-// 2. High-Level Metrics & Analytics
+// 1. Dashboard metrics
 // ---------------------------------------------------------------------------
 
 adminRouter.get(
   "/metrics",
+  requirePermission("dashboard.view"),
   wrap(async (_req: Request, res: Response): Promise<void> => {
     const [
       userCount,
@@ -149,6 +107,7 @@ adminRouter.get(
 
 adminRouter.get(
   "/users",
+  requirePermission("users.view"),
   wrap(async (req: Request, res: Response): Promise<void> => {
     const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
     const limit = Math.min(
@@ -157,10 +116,16 @@ adminRouter.get(
     );
     const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
     const role = pickEnum(req.query.role, Object.values(Role));
+    const status =
+      req.query.status === "blocked" || req.query.status === "active"
+        ? req.query.status
+        : null;
 
     const whereClause: Prisma.UserWhereInput = {
       deletedAt: null,
       ...(role ? { role } : {}),
+      ...(status === "blocked" ? { blockedAt: { not: null } } : {}),
+      ...(status === "active" ? { blockedAt: null } : {}),
       ...(search
         ? {
             OR: [
@@ -182,6 +147,10 @@ adminRouter.get(
           role: true,
           organizationName: true,
           createdAt: true,
+          isEmailVerified: true,
+          blockedAt: true,
+          twoFactorEnabledAt: true,
+          staffRole: { select: { id: true, name: true } },
         },
         skip: (page - 1) * limit,
         take: limit,
@@ -192,7 +161,10 @@ adminRouter.get(
     res.status(200).json({
       status: "success",
       data: {
-        items: users,
+        items: users.map(({ twoFactorEnabledAt, ...u }) => ({
+          ...u,
+          twoFactorEnabled: Boolean(twoFactorEnabledAt),
+        })),
         meta: {
           page,
           limit,
@@ -210,6 +182,7 @@ adminRouter.get(
 
 adminRouter.get(
   "/internships",
+  requireAnyPermission("internships.manage", "applications.view"),
   wrap(async (req: Request, res: Response): Promise<void> => {
     const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
     const limit = Math.min(
@@ -255,6 +228,7 @@ adminRouter.get(
 
 adminRouter.patch(
   "/internships/:id/status",
+  requirePermission("internships.manage"),
   wrap(async (req: Request, res: Response): Promise<void> => {
     const { id } = req.params;
     const { status } = req.body;
@@ -278,6 +252,7 @@ adminRouter.patch(
 
 adminRouter.get(
   "/applications",
+  requirePermission("applications.view"),
   wrap(async (req: Request, res: Response): Promise<void> => {
     const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
     const limit = Math.min(
@@ -476,6 +451,7 @@ async function auditAdmin(
 
 adminRouter.get(
   "/tracks",
+  requireAnyPermission("training.manage", "internships.manage"),
   wrap(async (_req: Request, res: Response): Promise<void> => {
     const tracks = await prisma.track.findMany({
       orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
@@ -487,6 +463,7 @@ adminRouter.get(
 
 adminRouter.get(
   "/programmes",
+  requireAnyPermission("training.manage", "enrolments.manage"),
   wrap(async (_req: Request, res: Response): Promise<void> => {
     const programmes = await prisma.programme.findMany({
       include: {
@@ -501,6 +478,7 @@ adminRouter.get(
 
 adminRouter.post(
   "/programmes",
+  requirePermission("training.manage"),
   wrap(async (req: Request, res: Response): Promise<void> => {
     const input = ProgrammeCreateSchema.parse(req.body);
     const slug = input.slug || slugify(input.title);
@@ -535,6 +513,7 @@ adminRouter.post(
 
 adminRouter.patch(
   "/programmes/:id",
+  requirePermission("training.manage"),
   wrap(async (req: Request, res: Response): Promise<void> => {
     const id = String(req.params.id || "");
     const input = ProgrammeUpdateSchema.parse(req.body);
@@ -555,6 +534,7 @@ adminRouter.patch(
 
 adminRouter.post(
   "/cohorts",
+  requirePermission("training.manage"),
   wrap(async (req: Request, res: Response): Promise<void> => {
     const input = CohortCreateSchema.parse(req.body);
     if (input.endDate <= input.startDate) {
@@ -597,6 +577,7 @@ adminRouter.post(
 
 adminRouter.patch(
   "/cohorts/:id",
+  requirePermission("training.manage"),
   wrap(async (req: Request, res: Response): Promise<void> => {
     const id = String(req.params.id || "");
     const input = CohortUpdateSchema.parse(req.body);
@@ -631,6 +612,7 @@ adminRouter.patch(
 
 adminRouter.get(
   "/cohorts",
+  requireAnyPermission("training.manage", "enrolments.manage"),
   wrap(async (_req: Request, res: Response): Promise<void> => {
     const cohorts = await prisma.cohort.findMany({
       include: {
@@ -646,6 +628,7 @@ adminRouter.get(
 
 adminRouter.patch(
   "/cohorts/:id/capacity",
+  requirePermission("training.manage"),
   wrap(async (req: Request, res: Response): Promise<void> => {
     const { id } = req.params;
     const { seatsTotal, seatsLeft } = req.body;
@@ -669,6 +652,7 @@ adminRouter.patch(
 
 adminRouter.get(
   "/enrolments",
+  requirePermission("enrolments.manage"),
   wrap(async (req: Request, res: Response): Promise<void> => {
     const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
     const limit = Math.min(
@@ -705,6 +689,7 @@ adminRouter.get(
 // Mark one student as completed: issues their certificate and emails it (once).
 adminRouter.post(
   "/enrolments/:id/complete",
+  requirePermission("enrolments.manage"),
   wrap(async (req: Request, res: Response): Promise<void> => {
     const id = String(req.params.id || "");
     const result = await certificateService.completeEnrollment(id, req.user?.id);
@@ -715,6 +700,7 @@ adminRouter.post(
 // Mark every student with a confirmed seat in a cohort as completed.
 adminRouter.post(
   "/cohorts/:id/complete",
+  requirePermission("enrolments.manage"),
   wrap(async (req: Request, res: Response): Promise<void> => {
     const id = String(req.params.id || "");
     const summary = await certificateService.completeCohort(id, req.user?.id);
@@ -728,6 +714,7 @@ adminRouter.post(
 
 adminRouter.get(
   "/payments",
+  requirePermission("payments.view"),
   wrap(async (req: Request, res: Response): Promise<void> => {
     const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
     const limit = Math.min(
@@ -794,6 +781,7 @@ adminRouter.get(
 
 adminRouter.get(
   "/contact-messages",
+  requirePermission("messages.manage"),
   wrap(async (_req: Request, res: Response): Promise<void> => {
     const messages = await prisma.contactMessage.findMany({
       orderBy: { createdAt: "desc" },
@@ -806,6 +794,7 @@ adminRouter.get(
 
 adminRouter.patch(
   "/contact-messages/:id/read",
+  requirePermission("messages.manage"),
   wrap(async (req: Request, res: Response): Promise<void> => {
     const { id } = req.params;
     const updated = await prisma.contactMessage.update({
@@ -823,6 +812,7 @@ adminRouter.patch(
 
 adminRouter.get(
   "/audit-logs",
+  requirePermission("audit.view"),
   wrap(async (req: Request, res: Response): Promise<void> => {
     const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
     const limit = Math.min(
@@ -869,6 +859,7 @@ function sanitizeCsvField(field: unknown): string {
 
 adminRouter.get(
   "/export/:entity",
+  requirePermission("reports.export"),
   wrap(async (req: Request, res: Response): Promise<void> => {
     const { entity } = req.params;
     const adminUserId = req.user?.id;
@@ -980,6 +971,7 @@ adminRouter.get(
 
 adminRouter.get(
   "/jobs/failed",
+  requirePermission("system.view"),
   wrap(async (_req: Request, res: Response): Promise<void> => {
     const { jobQueue } = await import("../jobs/queue.js");
     const failedJobs = jobQueue.getFailedJobs();
@@ -989,6 +981,7 @@ adminRouter.get(
 
 adminRouter.post(
   "/jobs/retry/:jobId",
+  requirePermission("system.view"),
   wrap(async (req: Request, res: Response): Promise<void> => {
     const { jobQueue } = await import("../jobs/queue.js");
     const jobId = req.params.jobId || "";
@@ -1012,6 +1005,7 @@ adminRouter.post(
 
 adminRouter.get(
   "/jobs/stats",
+  requirePermission("system.view"),
   wrap(async (_req: Request, res: Response): Promise<void> => {
     const { jobQueue } = await import("../jobs/queue.js");
     res.status(200).json({ status: "success", data: jobQueue.getStats() });

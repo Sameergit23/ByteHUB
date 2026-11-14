@@ -32,6 +32,49 @@ export interface AdminUser {
   role: Role;
   organizationName: string | null;
   createdAt: string;
+  isEmailVerified?: boolean;
+  blockedAt?: string | null;
+  twoFactorEnabled?: boolean;
+  staffRole?: { id: string; name: string } | null;
+}
+
+/** One account in detail (Users → Manage). */
+export interface AdminUserDetail {
+  user: AdminUser & {
+    blockedReason: string | null;
+    studentProfile: { phone: string | null; college: string } | null;
+    _count: { applications: number; enrollments: number; payments: number };
+  };
+  lastLoginAt: string | null;
+  applications: {
+    id: string;
+    status: string;
+    createdAt: string;
+    internship: { title: string; companyName: string } | null;
+  }[];
+  enrollments: {
+    id: string;
+    status: string;
+    createdAt: string;
+    cohort: { cohortCode: string; programme: { title: string } | null } | null;
+  }[];
+  payments: {
+    orderId: string;
+    amount: number;
+    currency: string;
+    status: string;
+    createdAt: string;
+  }[];
+}
+
+/** A staff role and its permission keys (see STAFF_PERMISSIONS in @bytehub/shared). */
+export interface AdminStaffRole {
+  id: string;
+  name: string;
+  description: string | null;
+  permissions: string[];
+  isSystem: boolean;
+  staffCount: number;
 }
 
 export type InternshipStatus = "DRAFT" | "PUBLISHED" | "CLOSED";
