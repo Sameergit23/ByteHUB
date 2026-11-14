@@ -10,8 +10,6 @@ export interface AuthenticatedUser {
   email: string;
   role: UserRole;
   name: string;
-  /** The session passed two-factor sign-in (staff). */
-  mfa: boolean;
 }
 
 declare global {
@@ -85,7 +83,6 @@ export const authenticateJWT = (
       email?: string;
       role?: UserRole;
       name?: string;
-      mfa?: boolean;
     };
     const uid = decoded.userId || decoded.id || "";
     req.user = {
@@ -94,7 +91,6 @@ export const authenticateJWT = (
       email: decoded.email || "",
       role: decoded.role as UserRole,
       name: decoded.name || "",
-      mfa: decoded.mfa === true,
     };
     next();
   } catch {

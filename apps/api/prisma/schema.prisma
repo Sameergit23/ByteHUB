@@ -78,20 +78,6 @@ model User {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  // Staff (role ADMIN): what they may do in the admin panel
-  staffRoleId String?
-  staffRole   StaffRole? @relation(fields: [staffRoleId], references: [id], onDelete: SetNull)
-
-  // Two-factor sign-in (authenticator app). The secret is stored encrypted.
-  twoFactorSecret      String?
-  twoFactorEnabledAt   DateTime?
-  twoFactorBackupCodes String[]  @default([]) // SHA-256 hashes; each is removed once used
-  twoFactorLastStep    Int? // last accepted 30-second step, so a code can't be used twice
-
-  // Blocked accounts can't sign in or refresh their session
-  blockedAt     DateTime?
-  blockedReason String?
-
   studentProfile          StudentProfile?
   companyProfile          CompanyProfile?
   refreshTokens           RefreshToken[]
@@ -107,35 +93,18 @@ model User {
   @@index([role])
   @@index([deletedAt])
   @@index([createdAt])
-  @@index([staffRoleId])
-}
-
-/// A set of admin-panel permissions given to staff members. Built-in roles can't be deleted.
-model StaffRole {
-  id          String   @id @default(uuid())
-  name        String   @unique
-  description String?
-  /// Permission keys (see STAFF_PERMISSIONS in @bytehub/shared). "*" means every permission.
-  permissions String[] @default([])
-  isSystem    Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  users User[]
 }
 
 model RefreshToken {
-  id          String    @id @default(uuid())
-  userId      String
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenHash   String    @unique
-  deviceInfo  String?
-  /// True when this session passed two-factor sign-in (staff only).
-  mfaVerified Boolean   @default(false)
-  expiresAt   DateTime
-  revokedAt   DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  deviceInfo String?
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   @@index([userId])
   @@index([tokenHash])

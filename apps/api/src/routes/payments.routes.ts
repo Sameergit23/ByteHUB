@@ -1,7 +1,6 @@
 import { Router, raw } from "express";
 import { PaymentController } from "../controllers/payment.controller.js";
 import { authenticateJWT, requireRoles } from "../middleware/auth.js";
-import { requirePermission, requireStaff, staffOnlyNeeds } from "../middleware/staff.js";
 import { paymentRateLimiter } from "../middleware/rateLimiter.js";
 
 export const paymentsRouter: Router = Router();
@@ -64,17 +63,11 @@ paymentsRouter.post(
 // ---------------------------------------------------------------------------
 paymentsRouter.get("/my", authenticateJWT, PaymentController.listMine);
 
-paymentsRouter.get(
-  "/status/:orderId",
-  authenticateJWT,
-  staffOnlyNeeds("payments.view"),
-  PaymentController.getStatus
-);
+paymentsRouter.get("/status/:orderId", authenticateJWT, PaymentController.getStatus);
 
 paymentsRouter.get(
   "/:orderId/invoice",
   authenticateJWT,
-  staffOnlyNeeds("payments.view"),
   PaymentController.downloadInvoice
 );
 
@@ -84,15 +77,13 @@ paymentsRouter.get(
 paymentsRouter.post(
   "/refund",
   authenticateJWT,
-  requireStaff(),
-  requirePermission("payments.refund"),
+  requireRoles("ADMIN"),
   PaymentController.refund
 );
 
 paymentsRouter.post(
   "/jobs/reconcile",
   authenticateJWT,
-  requireStaff(),
-  requirePermission("payments.refund"),
+  requireRoles("ADMIN"),
   PaymentController.reconcile
 );

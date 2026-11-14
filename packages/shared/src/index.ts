@@ -3,5 +3,3 @@ export * from "./schemas/internship.js";
 export * from "./schemas/training.js";
 export * from "./schemas/application.js";
 export * from "./schemas/payment.js";
-
-export * from "./schemas/staff.js";

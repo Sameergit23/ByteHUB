@@ -24,7 +24,7 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 // Endpoints where a 401 means "wrong credentials", not "session expired".
 const NO_REFRESH_RETRY =
-  /^\/auth\/(login|register|refresh|logout|forgot-password|reset-password|verify-email|2fa\/login)/;
+  /^\/auth\/(login|register|refresh|logout|forgot-password|reset-password|verify-email)/;
 
 // While the free API is waking up, Render answers 502/503/504. Read-only requests are safe to
 // repeat, so they wait and try again instead of failing (writes are never repeated).

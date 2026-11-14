@@ -13,14 +13,6 @@ import {
   generateSecureToken,
 } from "../utils/password.js";
 import { authRateLimiter } from "../utils/rateLimiter.js";
-import { twoFactorService } from "./twoFactor.service.js";
-
-/** Staff sessions end after this long, however active (students get 7 days). */
-const STAFF_SESSION_HOURS = 12;
-/** Staff are signed out after this long without any activity. */
-const STAFF_IDLE_MINUTES = 60;
-/** How long the "enter your authenticator code" step stays valid after the password. */
-const TWO_FACTOR_CHALLENGE_SECONDS = 5 * 60;
 
 export interface TokenPair {
   accessToken: string;
@@ -33,17 +25,16 @@ export class AuthService {
   /**
    * Helper to issue access (15m) & refresh (7d) tokens, storing the refresh token hash
    */
-  async issueTokenPair(
+  private async issueTokenPair(
     user: { id: string; email: string; role: UserRole; name: string },
     deviceInfo?: string,
-    options: { mfa?: boolean; sessionExpiresAt?: Date } = {}
+    _familyId?: string
   ): Promise<TokenPair> {
     const accessExpiresIn = "15m";
-    const isStaff = user.role === "ADMIN";
-    const mfa = isStaff && options.mfa === true;
+    const refreshExpiresDays = 7;
 
     const accessToken = jwt.sign(
-      { userId: user.id, email: user.email, role: user.role, name: user.name, mfa },
+      { userId: user.id, email: user.email, role: user.role, name: user.name },
       env.JWT_SECRET,
       { expiresIn: accessExpiresIn }
     );
@@ -52,13 +43,9 @@ export class AuthService {
     const tokenHash = hashToken(rawRefreshToken);
 
     const accessTokenExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
-    // Rotation keeps the original end time, so a staff session can't be stretched past 12 hours.
-    const refreshTokenExpiresAt =
-      options.sessionExpiresAt ??
-      new Date(
-        Date.now() +
-          (isStaff ? STAFF_SESSION_HOURS * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000)
-      );
+    const refreshTokenExpiresAt = new Date(
+      Date.now() + refreshExpiresDays * 24 * 60 * 60 * 1000
+    );
 
     // Persist refresh token hash in DB
     await prisma.refreshToken.create({
@@ -67,7 +54,6 @@ export class AuthService {
         tokenHash,
         deviceInfo: deviceInfo || "Web Browser",
         expiresAt: refreshTokenExpiresAt,
-        mfaVerified: mfa,
       },
     });
 
@@ -254,39 +240,6 @@ export class AuthService {
     // Reset rate limiter on successful auth
     authRateLimiter.recordSuccess(rateKey);
 
-    if (user.blockedAt) {
-      throw AppError.forbidden(
-        "This account has been blocked. If you think this is a mistake, contact ByteHUB support."
-      );
-    }
-
-    // Staff with two-factor set up: the password alone doesn't sign them in.
-    if (user.role === "ADMIN" && user.twoFactorEnabledAt) {
-      const challengeToken = jwt.sign(
-        { purpose: "2fa", userId: user.id },
-        env.JWT_SECRET,
-        {
-          expiresIn: TWO_FACTOR_CHALLENGE_SECONDS,
-        }
-      );
-      await prisma.auditLog
-        .create({
-          data: {
-            userId: user.id,
-            action: "AUTH_PASSWORD_OK_TWO_FACTOR_PENDING",
-            entityType: "USER",
-            entityId: user.id,
-            ipAddress: ip,
-          },
-        })
-        .catch(() => null);
-      return {
-        twoFactorRequired: true as const,
-        challengeToken,
-        user: { id: user.id, name: user.name, role: user.role },
-      };
-    }
-
     // Audit log
     await prisma.auditLog
       .create({
@@ -307,103 +260,7 @@ export class AuthService {
     );
 
     return {
-      twoFactorRequired: false as const,
       tokens,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        organizationName: user.organizationName,
-        // Staff without two-factor are sent to set it up before using the admin panel.
-        twoFactorSetupRequired: user.role === "ADMIN",
-      },
-    };
-  }
-
-  /**
-   * Second sign-in step for staff: the code from their authenticator app (or a backup code).
-   */
-  async completeTwoFactorLogin(
-    challengeToken: string,
-    code: string,
-    ip: string,
-    userAgent?: string
-  ) {
-    let userId: string;
-    try {
-      const payload = jwt.verify(challengeToken, env.JWT_SECRET) as jwt.JwtPayload;
-      if (payload.purpose !== "2fa" || typeof payload.userId !== "string")
-        throw new Error();
-      userId = payload.userId;
-    } catch {
-      throw AppError.unauthorized(
-        "This sign-in step has expired. Enter your password again."
-      );
-    }
-
-    const rateKey = `auth_2fa_${userId}`;
-    const check = authRateLimiter.check(rateKey);
-    if (check.locked) {
-      throw AppError.forbidden(
-        `Too many wrong codes. Try again in ${check.lockoutExpiresInSeconds} seconds.`
-      );
-    }
-
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user || user.deletedAt || user.blockedAt || user.role !== "ADMIN") {
-      throw AppError.unauthorized(
-        "This sign-in step has expired. Enter your password again."
-      );
-    }
-
-    const method = await twoFactorService.verify(userId, code);
-    if (!method) {
-      const fail = authRateLimiter.recordFailure(rateKey);
-      await prisma.auditLog
-        .create({
-          data: {
-            userId,
-            action: "AUTH_TWO_FACTOR_FAILED",
-            entityType: "USER",
-            entityId: userId,
-            ipAddress: ip,
-          },
-        })
-        .catch(() => null);
-      if (fail.locked) {
-        throw AppError.forbidden(
-          `Too many wrong codes. Try again in ${fail.lockoutDurationSeconds} seconds.`
-        );
-      }
-      throw AppError.unauthorized(
-        "That code didn't work. Use the newest code from your authenticator app, or a backup code."
-      );
-    }
-    authRateLimiter.recordSuccess(rateKey);
-
-    await prisma.auditLog
-      .create({
-        data: {
-          userId,
-          action: "AUTH_LOGIN_SUCCESS",
-          entityType: "USER",
-          entityId: userId,
-          ipAddress: ip,
-          details: { role: user.role, twoFactor: method },
-        },
-      })
-      .catch(() => null);
-
-    const tokens = await this.issueTokenPair(
-      { id: user.id, email: user.email, role: user.role as UserRole, name: user.name },
-      userAgent,
-      { mfa: true }
-    );
-    return {
-      tokens,
-      backupCodesLeft:
-        method === "backup" ? user.twoFactorBackupCodes.length - 1 : undefined,
       user: {
         id: user.id,
         email: user.email,
@@ -468,30 +325,6 @@ export class AuthService {
       throw AppError.unauthorized("Session expired. Please sign in again.");
     }
 
-    // Blocked or deleted accounts lose every session.
-    if (storedToken.user.deletedAt || storedToken.user.blockedAt) {
-      await prisma.refreshToken.updateMany({
-        where: { userId: storedToken.userId, revokedAt: null },
-        data: { revokedAt: new Date() },
-      });
-      throw AppError.unauthorized("This account can no longer sign in.");
-    }
-
-    // Staff are signed out after an hour without activity (each refresh happens while active).
-    const isStaff = storedToken.user.role === "ADMIN";
-    if (
-      isStaff &&
-      Date.now() - storedToken.createdAt.getTime() > STAFF_IDLE_MINUTES * 60 * 1000
-    ) {
-      await prisma.refreshToken.update({
-        where: { id: storedToken.id },
-        data: { revokedAt: new Date() },
-      });
-      throw AppError.unauthorized(
-        `You were signed out after ${STAFF_IDLE_MINUTES} minutes without activity. Please sign in again.`
-      );
-    }
-
     // Invalidate old token (mark as rotated/revoked)
     await prisma.refreshToken.update({
       where: { id: storedToken.id },
@@ -506,12 +339,7 @@ export class AuthService {
         role: storedToken.user.role as UserRole,
         name: storedToken.user.name,
       },
-      userAgent,
-      {
-        mfa: storedToken.mfaVerified,
-        // Staff sessions keep their original end time.
-        sessionExpiresAt: isStaff ? storedToken.expiresAt : undefined,
-      }
+      userAgent
     );
 
     return {

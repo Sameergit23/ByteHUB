@@ -52,30 +52,6 @@ export function generateTOTPCode(
   return otp.toString().padStart(6, "0");
 }
 
-/**
- * Returns the 30-second time step a code belongs to (within ±window steps of now), or null.
- * Storing the last accepted step lets callers reject a code that was already used.
- */
-export function matchTOTPStep(
-  token: string,
-  secretBase32: string,
-  window = 1,
-  step = 30
-): number | null {
-  if (!/^\d{6}$/.test(token) || !secretBase32) return null;
-  const nowSeconds = Math.floor(Date.now() / 1000);
-  for (let i = -window; i <= window; i++) {
-    const t = nowSeconds + i * step;
-    const calculated = generateTOTPCode(secretBase32, t, step);
-    if (
-      crypto.timingSafeEqual(Buffer.from(token, "utf8"), Buffer.from(calculated, "utf8"))
-    ) {
-      return Math.floor(t / step);
-    }
-  }
-  return null;
-}
-
 export function verifyTOTPCode(
   token: string,
   secretBase32: string,

@@ -106,25 +106,13 @@ export function describeError(
         message
       );
     case 401:
-      if (lower.includes("password") && !lower.includes("enter your password again")) {
-        return makeAlert(
-          "validation",
-          "Wrong email or password",
-          "Check both and try again."
-        );
-      }
-      // Two-factor sign-in: a wrong code, or the step timed out.
-      if (lower.includes("code")) {
-        return makeAlert("validation", "That code didn't work", message);
-      }
-      if (lower.includes("sign-in step")) {
-        return makeAlert("session", "Sign-in step expired", message);
-      }
-      return makeAlert(
-        "session",
-        "Please sign in again",
-        "Your session ended for your security."
-      );
+      return lower.includes("password")
+        ? makeAlert("validation", "Wrong email or password", "Check both and try again.")
+        : makeAlert(
+            "session",
+            "Please sign in again",
+            "Your session ended for your security."
+          );
     case 403:
       if (lower.includes("locked"))
         return makeAlert("locked", "Account temporarily locked", message);

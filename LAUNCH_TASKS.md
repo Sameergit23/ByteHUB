@@ -52,13 +52,6 @@ hosting has no permanent disk.
 - [x] Apply form: phone country code picker; PIN code fills city and state (India Post lookup);
       area, street address; searchable college list (type your own if missing); GitHub, LinkedIn
       and the written questions are optional. Fixed: "Continue" on step 3 could skip the review step
-- [x] Admin security (14 Nov 2026): two-factor sign-in (authenticator app + 10 backup codes) for
-      every staff account; staff roles with permissions checked by the server (Super Admin, Admin,
-      Manager, Moderator, Staff, custom roles); block/unblock, edit, delete users and send
-      password resets; staff sessions end after 60 minutes idle or 12 hours; admin panel at a
-      secret address (`ADMIN_PATH`), `/admin` shows "page not found"
-- [ ] Admin panel, later phases: dashboard charts and reports (CSV/PDF), email announcements and
-      notification history, application settings, integrations status, data backup download
 - [ ] Only if you ever add a **free** cohort: a "join for free" endpoint (paid cohorts work; the
       API currently has no direct enrolment for price 0)
 
@@ -91,12 +84,6 @@ hosting has no permanent disk.
       migrations `20261111120000_internship_registration_fee` and
       `20261111130000_application_form_details` (Claude gives the SQL). The new code needs these
       columns, so run it first, then push
-- [ ] **Before pushing the admin security update:** Supabase SQL Editor: run the update for
-      migration `20261114120000_staff_roles_two_factor` (Claude gives the SQL). Then in Render →
-      bytehub-web → Environment add `ADMIN_PATH` = your secret admin address (letters, digits and
-      dashes, 8+ characters, e.g. `ops-9sxf0httdpvxzw`). After the deploy: sign in at
-      bytehubnet.com → you're taken to the admin panel → set up the authenticator app → save the
-      backup codes
 - [ ] Post an internship with a ₹1 registration fee → apply → pay in the sandbox → application
       shows as New in Admin → Applications → mark Not selected → refund recorded → refund in Cashfree
 - [ ] Admin posts an internship (Admin → Internships → Post internship) → student applies with resume →
@@ -107,18 +94,6 @@ hosting has no permanent disk.
 - [ ] After the sandbox payment: offer letter email arrives and the letter opens from the dashboard
 - [ ] Admin → Enrolments → Mark completed → certificate email arrives and `/verify/<ID>` shows it
 - [ ] Resume still opens after a redeploy
-
-## Admin security: if a staff member is locked out
-
-- Lost phone: sign in with one of the 10 backup codes, then another Super Admin resets their
-  two-factor (Users → open the person → Reset two-factor) so they can set it up again.
-- The only Super Admin lost both phone and backup codes: Supabase → SQL Editor, run
-  `update "User" set "twoFactorSecret" = null, "twoFactorEnabledAt" = null, "twoFactorBackupCodes" = '{}' where email = 'YOUR EMAIL';`
-  then sign in and set up the authenticator again.
-- Changing `JWT_SECRET` on Render makes every stored authenticator key unreadable: all staff
-  set up two-factor again at their next sign-in.
-- Forgot the secret admin address: just sign in at bytehubnet.com; staff are sent there
-  automatically. It's also in Render → bytehub-web → Environment → `ADMIN_PATH`.
 
 ## Pending — real payments (Phase 8)
 

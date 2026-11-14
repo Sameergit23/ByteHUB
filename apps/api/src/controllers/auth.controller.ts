@@ -2,9 +2,6 @@ import { Request, Response, NextFunction } from "express";
 import { authService, TokenPair } from "../services/auth.service.js";
 import { env } from "../config/env.js";
 import { prisma } from "../lib/prisma.js";
-import { twoFactorService } from "../services/twoFactor.service.js";
-import { hashToken } from "../utils/password.js";
-import type { UserRole } from "@bytehub/shared";
 
 /**
  * Cookie configuration helper
@@ -74,19 +71,6 @@ export class AuthController {
       const userAgent = req.headers["user-agent"];
       const result = await authService.login(req.body, ip, userAgent);
 
-      // Staff with two-factor: no session yet, the browser asks for the authenticator code.
-      if (result.twoFactorRequired) {
-        res.status(200).json({
-          status: "success",
-          data: {
-            twoFactorRequired: true,
-            challengeToken: result.challengeToken,
-            user: result.user,
-          },
-        });
-        return;
-      }
-
       setAuthCookies(res, result.tokens);
 
       res.status(200).json({
@@ -96,100 +80,6 @@ export class AuthController {
           accessToken: result.tokens.accessToken,
         },
       });
-    } catch (err) {
-      next(err);
-    }
-  }
-
-  /**
-   * POST /api/auth/2fa/login — second sign-in step for staff (authenticator or backup code).
-   */
-  static async twoFactorLogin(
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ): Promise<void> {
-    try {
-      const ip = (req.headers["x-forwarded-for"] as string) || req.ip || "127.0.0.1";
-      const userAgent = req.headers["user-agent"];
-      const result = await authService.completeTwoFactorLogin(
-        req.body.challengeToken,
-        req.body.code,
-        ip,
-        userAgent
-      );
-      setAuthCookies(res, result.tokens);
-      res.status(200).json({
-        status: "success",
-        data: { user: result.user, backupCodesLeft: result.backupCodesLeft },
-      });
-    } catch (err) {
-      next(err);
-    }
-  }
-
-  /**
-   * POST /api/auth/2fa/setup — staff start setting up their authenticator app (QR code).
-   */
-  static async twoFactorSetup(
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ): Promise<void> {
-    try {
-      const data = await twoFactorService.beginSetup(req.user!.id);
-      res.status(200).json({ status: "success", data });
-    } catch (err) {
-      next(err);
-    }
-  }
-
-  /**
-   * POST /api/auth/2fa/enable — confirm with a code; returns the backup codes (shown once)
-   * and upgrades the current session to a two-factor session.
-   */
-  static async twoFactorEnable(
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ): Promise<void> {
-    try {
-      const ip = (req.headers["x-forwarded-for"] as string) || req.ip || "127.0.0.1";
-      const userAgent = req.headers["user-agent"];
-      const userId = req.user!.id;
-      const backupCodes = await twoFactorService.confirmSetup(userId, req.body.code);
-
-      // Replace the current (password-only) session with a two-factor one.
-      const rawRefresh = req.cookies?.bh_refresh_token;
-      if (rawRefresh) {
-        await prisma.refreshToken
-          .updateMany({
-            where: { tokenHash: hashToken(rawRefresh), userId, revokedAt: null },
-            data: { revokedAt: new Date() },
-          })
-          .catch(() => null);
-      }
-      const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
-      const tokens = await authService.issueTokenPair(
-        { id: user.id, email: user.email, role: user.role as UserRole, name: user.name },
-        userAgent,
-        { mfa: true }
-      );
-      setAuthCookies(res, tokens);
-
-      await prisma.auditLog
-        .create({
-          data: {
-            userId,
-            action: "AUTH_TWO_FACTOR_ENABLED",
-            entityType: "USER",
-            entityId: userId,
-            ipAddress: ip,
-          },
-        })
-        .catch(() => null);
-
-      res.status(200).json({ status: "success", data: { backupCodes } });
     } catch (err) {
       next(err);
     }
@@ -333,9 +223,6 @@ export class AuthController {
           createdAt: true,
           studentProfile: true,
           companyProfile: true,
-          twoFactorEnabledAt: true,
-          twoFactorBackupCodes: true,
-          staffRole: { select: { id: true, name: true, permissions: true } },
         },
       });
 
@@ -344,26 +231,7 @@ export class AuthController {
         return;
       }
 
-      const { twoFactorEnabledAt, twoFactorBackupCodes, staffRole, ...profile } = user;
-      res.status(200).json({
-        status: "success",
-        data: {
-          ...profile,
-          ...(user.role === "ADMIN"
-            ? {
-                staff: {
-                  roleId: staffRole?.id ?? null,
-                  roleName: staffRole?.name ?? null,
-                  permissions: staffRole?.permissions ?? [],
-                  twoFactorEnabled: Boolean(twoFactorEnabledAt),
-                  backupCodesLeft: twoFactorBackupCodes.length,
-                  // Whether this session passed the authenticator step.
-                  sessionVerified: req.user!.mfa,
-                },
-              }
-            : {}),
-        },
-      });
+      res.status(200).json({ status: "success", data: user });
     } catch (err) {
       next(err);
     }
@@ -431,14 +299,7 @@ export class AuthController {
       }
 
       // Strip internal password hashes or sensitive token records
-      // (also the encrypted authenticator key and backup-code hashes: never leave the server)
-      const {
-        passwordHash: _passwordHash,
-        twoFactorSecret: _twoFactorSecret,
-        twoFactorBackupCodes: _twoFactorBackupCodes,
-        twoFactorLastStep: _twoFactorLastStep,
-        ...exportPayload
-      } = userData;
+      const { passwordHash: _passwordHash, ...exportPayload } = userData;
 
       res.setHeader(
         "Content-Disposition",

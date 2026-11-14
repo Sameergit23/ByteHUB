@@ -100,7 +100,7 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <Link href="/dashboard" className="hover:text-accent transition-colors">
+                <Link href="/admin" className="hover:text-accent transition-colors">
                   Admin System
                 </Link>
               </li>
