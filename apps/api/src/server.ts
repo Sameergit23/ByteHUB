@@ -5,6 +5,7 @@ import { SentryService } from "./config/sentry.js";
 import { runProductionPreflight, reportPreflight } from "./config/preflight.js";
 import { logger } from "./utils/logger.js";
 import { jobQueue, JobTypeName } from "./jobs/queue.js";
+import { ensureSystemStaffRoles } from "./services/staffRoles.service.js";
 
 // ---------------------------------------------------------------------------
 // Error reporting for anything that escapes request handling
@@ -57,6 +58,11 @@ async function start(): Promise<void> {
   if (!reportPreflight(preflight)) {
     process.exit(1);
   }
+
+  // Built-in staff roles (the migration creates them too; this repairs a missing one).
+  await ensureSystemStaffRoles().catch((err) =>
+    logger.error({ err }, "Could not check the built-in staff roles")
+  );
 
   const app = createApp();
   server = app.listen(env.PORT, () => {

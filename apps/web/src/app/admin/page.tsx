@@ -43,23 +43,23 @@ import { useAdminResource } from "../../components/admin/useAdminResource";
 import { formatMoney } from "../../lib/format";
 
 export default function AdminOverviewPage() {
-  const { summary, refreshSummary } = useAdmin();
+  const { summary, refreshSummary, href: adminHref, can } = useAdmin();
   const metrics = summary.metrics;
 
   const latest = useAdminResource<AdminApplication[], Envelope<Paged<AdminApplication>>>(
-    "/admin/applications?status=SUBMITTED&limit=5",
+    can("applications.view") ? "/admin/applications?status=SUBMITTED&limit=5" : null,
     (res) => res.data.items
   );
   const messages = useAdminResource<AdminMessage[], Envelope<AdminMessage[]>>(
-    "/admin/contact-messages",
+    can("messages.manage") ? "/admin/contact-messages" : null,
     (res) => res.data.filter((m) => !m.isRead).slice(0, 5)
   );
   const payments = useAdminResource<AdminPayment[], Envelope<Paged<AdminPayment>>>(
-    "/admin/payments?limit=6",
+    can("payments.view") ? "/admin/payments?limit=6" : null,
     (res) => res.data.items
   );
   const activity = useAdminResource<AdminAuditLog[], Envelope<Paged<AdminAuditLog>>>(
-    "/admin/audit-logs?limit=8",
+    can("audit.view") ? "/admin/audit-logs?limit=8" : null,
     (res) => res.data.items
   );
   const health = useAdminResource<HealthReport, HealthReport>("/health", (res) => res);
@@ -118,7 +118,7 @@ export default function AdminOverviewPage() {
                 ? "All reviewed"
                 : undefined
           }
-          href="/admin/applications"
+          href={adminHref("/applications")}
         />
         <StatCard
           label="Unread messages"
@@ -133,7 +133,7 @@ export default function AdminOverviewPage() {
                 ? "Inbox is clear"
                 : undefined
           }
-          href="/admin/messages"
+          href={adminHref("/messages")}
         />
         <StatCard
           label="Revenue"
@@ -145,7 +145,7 @@ export default function AdminOverviewPage() {
               ? `+ $${metrics.totalRevenueUSD.toLocaleString("en-US")} · paid orders`
               : "All paid orders"
           }
-          href="/admin/payments"
+          href={adminHref("/payments")}
         />
         <StatCard
           label="Active enrolments"
@@ -153,7 +153,7 @@ export default function AdminOverviewPage() {
           value={metrics?.activeEnrollments ?? "—"}
           loading={loadingNumbers}
           hint="Students in a cohort"
-          href="/admin/enrolments"
+          href={adminHref("/enrolments")}
         />
         <StatCard
           label="Users"
@@ -161,7 +161,7 @@ export default function AdminOverviewPage() {
           value={metrics?.userCount ?? "—"}
           loading={loadingNumbers}
           hint="Students and admins"
-          href="/admin/users"
+          href={adminHref("/users")}
         />
         <StatCard
           label="Internships"
@@ -169,7 +169,7 @@ export default function AdminOverviewPage() {
           value={metrics?.internshipCount ?? "—"}
           loading={loadingNumbers}
           hint="All statuses"
-          href="/admin/internships"
+          href={adminHref("/internships")}
         />
         <StatCard
           label="Applications"
@@ -177,7 +177,7 @@ export default function AdminOverviewPage() {
           value={metrics?.applicationCount ?? "—"}
           loading={loadingNumbers}
           hint="Across all internships"
-          href="/admin/applications"
+          href={adminHref("/applications")}
         />
         <StatCard
           label="Failed jobs"
@@ -192,171 +192,184 @@ export default function AdminOverviewPage() {
                 ? "Emails and scheduled tasks"
                 : undefined
           }
-          href="/admin/system"
+          href={adminHref("/system")}
         />
       </section>
 
       {/* Needs attention + system */}
       <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
-        <Panel
-          title="New applications"
-          description="Students waiting for a first look"
-          actions={<ViewAll href="/admin/applications" />}
-        >
-          <ListBody
-            loading={latest.loading && !latest.data}
-            error={latest.error}
-            onRetry={latest.reload}
-            empty={
-              <EmptyState
-                icon={IconApplicant}
-                title="No new applications"
-                description="Applications to your internships appear here."
-              />
-            }
-            items={latest.data}
-            render={(item) => (
-              <Link
-                href="/admin/applications"
-                className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-zinc-50"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-zinc-900">
-                    {item.fullName}
-                  </p>
+        {can("applications.view") && (
+          <Panel
+            title="New applications"
+            description="Students waiting for a first look"
+            actions={<ViewAll href={adminHref("/applications")} />}
+          >
+            <ListBody
+              loading={latest.loading && !latest.data}
+              error={latest.error}
+              onRetry={latest.reload}
+              empty={
+                <EmptyState
+                  icon={IconApplicant}
+                  title="No new applications"
+                  description="Applications to your internships appear here."
+                />
+              }
+              items={latest.data}
+              render={(item) => (
+                <Link
+                  href={adminHref("/applications")}
+                  className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-zinc-50"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-zinc-900">
+                      {item.fullName}
+                    </p>
+                    <p className="truncate text-xs text-zinc-500">
+                      {item.internship?.title || "Internship"} · {timeAgo(item.createdAt)}
+                    </p>
+                  </div>
+                  <Badge tone="blue">New</Badge>
+                </Link>
+              )}
+              keyOf={(item) => item.id}
+            />
+          </Panel>
+        )}
+
+        {can("messages.manage") && (
+          <Panel
+            title="Unread messages"
+            description="From the website's contact form"
+            actions={<ViewAll href={adminHref("/messages")} />}
+          >
+            <ListBody
+              loading={messages.loading && !messages.data}
+              error={messages.error}
+              onRetry={messages.reload}
+              empty={
+                <EmptyState
+                  icon={IconInbox}
+                  title="Inbox is clear"
+                  description="New contact-form messages will appear here."
+                />
+              }
+              items={messages.data}
+              render={(item) => (
+                <Link
+                  href={adminHref("/messages")}
+                  className="block px-4 py-3 hover:bg-zinc-50"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="truncate text-sm font-medium text-zinc-900">
+                      {item.topic}
+                    </p>
+                    <span className="shrink-0 text-xs text-zinc-400">
+                      {timeAgo(item.createdAt)}
+                    </span>
+                  </div>
                   <p className="truncate text-xs text-zinc-500">
-                    {item.internship?.title || "Internship"} · {timeAgo(item.createdAt)}
+                    {item.fullName} — {item.message}
                   </p>
-                </div>
-                <Badge tone="blue">New</Badge>
-              </Link>
-            )}
-            keyOf={(item) => item.id}
-          />
-        </Panel>
+                </Link>
+              )}
+              keyOf={(item) => item.id}
+            />
+          </Panel>
+        )}
 
-        <Panel
-          title="Unread messages"
-          description="From the website's contact form"
-          actions={<ViewAll href="/admin/messages" />}
-        >
-          <ListBody
-            loading={messages.loading && !messages.data}
-            error={messages.error}
-            onRetry={messages.reload}
-            empty={
-              <EmptyState
-                icon={IconInbox}
-                title="Inbox is clear"
-                description="New contact-form messages will appear here."
-              />
-            }
-            items={messages.data}
-            render={(item) => (
-              <Link href="/admin/messages" className="block px-4 py-3 hover:bg-zinc-50">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="truncate text-sm font-medium text-zinc-900">
-                    {item.topic}
-                  </p>
-                  <span className="shrink-0 text-xs text-zinc-400">
-                    {timeAgo(item.createdAt)}
-                  </span>
-                </div>
-                <p className="truncate text-xs text-zinc-500">
-                  {item.fullName} — {item.message}
-                </p>
-              </Link>
-            )}
-            keyOf={(item) => item.id}
-          />
-        </Panel>
-
-        <Panel
-          title="System status"
-          description="Live check of the API and database"
-          actions={<ViewAll href="/admin/system" label="Details" />}
-        >
-          <SystemStatus
-            health={health.data}
-            error={health.error}
-            loading={health.loading && !health.data}
-            failedJobs={failedJobs}
-            onRetry={health.reload}
-          />
-        </Panel>
+        {can("system.view") && (
+          <Panel
+            title="System status"
+            description="Live check of the API and database"
+            actions={<ViewAll href={adminHref("/system")} label="Details" />}
+          >
+            <SystemStatus
+              health={health.data}
+              error={health.error}
+              loading={health.loading && !health.data}
+              failedJobs={failedJobs}
+              onRetry={health.reload}
+            />
+          </Panel>
+        )}
       </div>
 
       {/* Recent activity */}
       <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-5">
-        <Panel
-          className="xl:col-span-3"
-          title="Recent payments"
-          actions={<ViewAll href="/admin/payments" />}
-        >
-          <ListBody
-            loading={payments.loading && !payments.data}
-            error={payments.error}
-            onRetry={payments.reload}
-            empty={
-              <EmptyState
-                icon={IconCard}
-                title="No payments yet"
-                description="Course payments will appear here as soon as students pay."
-              />
-            }
-            items={payments.data}
-            render={(p) => (
-              <div className="flex items-center justify-between gap-3 px-4 py-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-zinc-900">
-                    {p.user?.name || p.user?.email || "Unknown customer"}
-                  </p>
-                  <p className="truncate text-xs text-zinc-500">
-                    {p.programmeTitle || "Programme"} · {timeAgo(p.createdAt)}
-                  </p>
+        {can("payments.view") && (
+          <Panel
+            className="xl:col-span-3"
+            title="Recent payments"
+            actions={<ViewAll href={adminHref("/payments")} />}
+          >
+            <ListBody
+              loading={payments.loading && !payments.data}
+              error={payments.error}
+              onRetry={payments.reload}
+              empty={
+                <EmptyState
+                  icon={IconCard}
+                  title="No payments yet"
+                  description="Course payments will appear here as soon as students pay."
+                />
+              }
+              items={payments.data}
+              render={(p) => (
+                <div className="flex items-center justify-between gap-3 px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-zinc-900">
+                      {p.user?.name || p.user?.email || "Unknown customer"}
+                    </p>
+                    <p className="truncate text-xs text-zinc-500">
+                      {p.programmeTitle || "Programme"} · {timeAgo(p.createdAt)}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <span className="text-sm font-medium tabular-nums text-zinc-900">
+                      {formatMoney(p.amount, p.currency)}
+                    </span>
+                    <StatusBadge status={p.status} />
+                  </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-3">
-                  <span className="text-sm font-medium tabular-nums text-zinc-900">
-                    {formatMoney(p.amount, p.currency)}
-                  </span>
-                  <StatusBadge status={p.status} />
-                </div>
-              </div>
-            )}
-            keyOf={(p) => p.id}
-          />
-        </Panel>
+              )}
+              keyOf={(p) => p.id}
+            />
+          </Panel>
+        )}
 
-        <Panel
-          className="xl:col-span-2"
-          title="Recent activity"
-          description="Sign-ins, exports and other recorded events"
-          actions={<ViewAll href="/admin/audit" />}
-        >
-          <ListBody
-            loading={activity.loading && !activity.data}
-            error={activity.error}
-            onRetry={activity.reload}
-            empty={<EmptyState icon={IconAudit} title="No activity recorded yet" />}
-            items={activity.data}
-            render={(log) => (
-              <div className="flex items-start justify-between gap-3 px-4 py-2.5">
-                <div className="min-w-0">
-                  <p className="truncate text-sm text-zinc-900">
-                    {eventLabel(log.action)}
-                  </p>
-                  <p className="truncate text-xs text-zinc-500">
-                    {log.user?.email || "System"}
-                  </p>
+        {can("audit.view") && (
+          <Panel
+            className="xl:col-span-2"
+            title="Recent activity"
+            description="Sign-ins, exports and other recorded events"
+            actions={<ViewAll href={adminHref("/audit")} />}
+          >
+            <ListBody
+              loading={activity.loading && !activity.data}
+              error={activity.error}
+              onRetry={activity.reload}
+              empty={<EmptyState icon={IconAudit} title="No activity recorded yet" />}
+              items={activity.data}
+              render={(log) => (
+                <div className="flex items-start justify-between gap-3 px-4 py-2.5">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm text-zinc-900">
+                      {eventLabel(log.action)}
+                    </p>
+                    <p className="truncate text-xs text-zinc-500">
+                      {log.user?.email || "System"}
+                    </p>
+                  </div>
+                  <span className="shrink-0 text-xs text-zinc-400">
+                    {timeAgo(log.createdAt)}
+                  </span>
                 </div>
-                <span className="shrink-0 text-xs text-zinc-400">
-                  {timeAgo(log.createdAt)}
-                </span>
-              </div>
-            )}
-            keyOf={(log) => log.id}
-          />
-        </Panel>
+              )}
+              keyOf={(log) => log.id}
+            />
+          </Panel>
+        )}
       </div>
     </>
   );

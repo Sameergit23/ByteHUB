@@ -174,3 +174,24 @@ export const IconPencil = icon(
     <path d="m13.5 6.5 4 4" />
   </>
 );
+
+export const IconShield = icon(
+  <>
+    <path d="M12 3 4.5 6v5.5c0 4.6 3.1 8.5 7.5 9.5 4.4-1 7.5-4.9 7.5-9.5V6L12 3Z" />
+    <path d="m9 12 2.2 2.2L15.5 10" />
+  </>
+);
+
+export const IconLock = icon(
+  <>
+    <rect x="5" y="11" width="14" height="9.5" />
+    <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+  </>
+);
+
+export const IconBan = icon(
+  <>
+    <circle cx="12" cy="12" r="8.5" />
+    <path d="m6 6 12 12" />
+  </>
+);

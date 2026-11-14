@@ -45,6 +45,23 @@ export const authRateLimiter: RateLimitRequestHandler = rateLimit({
   },
 });
 
+// 2b. Two-factor steps (setup, confirm, sign-in code). Wrong codes are also locked per account
+// in the auth service; this only stops one address flooding the endpoints.
+export const twoFactorRateLimiter: RateLimitRequestHandler = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: isTest ? 10000 : 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: Request) =>
+    `2fa_${req.ip || req.socket.remoteAddress || "unknown_ip"}`,
+  message: {
+    error: {
+      code: "AUTH_RATE_LIMITED",
+      message: "Too many two-factor attempts from this network. Try again in 15 minutes.",
+    },
+  },
+});
+
 // 3. Strict Contact Form Limiter (Spam prevention)
 export const contactRateLimiter: RateLimitRequestHandler = rateLimit({
   windowMs: 15 * 60 * 1000,

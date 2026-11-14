@@ -2,6 +2,7 @@ import { Router } from "express";
 import { ApplicationController } from "../controllers/application.controller.js";
 import { validateRequest } from "../validators/validate.middleware.js";
 import { authenticateJWT, requireRoles } from "../middleware/auth.js";
+import { requirePermission, requireStaff, staffOnlyNeeds } from "../middleware/staff.js";
 import { uploadRateLimiter } from "../middleware/rateLimiter.js";
 import {
   CompleteApplicationSchema,
@@ -42,12 +43,19 @@ applicationsRouter.post(
 applicationsRouter.get(
   "/company",
   authenticateJWT,
-  requireRoles("COMPANY", "ADMIN"),
+  requireStaff(),
+  requirePermission("applications.view"),
   ApplicationController.getCompanyApplications
 );
 
 // Student, Company, Admin: Download / view resume (guarded against IDOR)
-applicationsRouter.get("/:id/resume", authenticateJWT, ApplicationController.getResume);
+applicationsRouter.get(
+  "/:id/resume",
+  authenticateJWT,
+  // Students can open their own resume; staff need the applications permission.
+  staffOnlyNeeds("applications.view"),
+  ApplicationController.getResume
+);
 
 // Resume upload with magic bytes verification and rate limiting
 applicationsRouter.post(
@@ -62,7 +70,8 @@ applicationsRouter.post(
 applicationsRouter.get(
   "/internship/:internshipId",
   authenticateJWT,
-  requireRoles("COMPANY", "ADMIN"),
+  requireStaff(),
+  requirePermission("applications.view"),
   ApplicationController.getInternshipApplications
 );
 
@@ -70,7 +79,8 @@ applicationsRouter.get(
 applicationsRouter.patch(
   "/:id/status",
   authenticateJWT,
-  requireRoles("COMPANY", "ADMIN"),
+  requireStaff(),
+  requirePermission("applications.manage"),
   validateRequest({ body: UpdateApplicationStatusSchema }),
   ApplicationController.updateStatus
 );

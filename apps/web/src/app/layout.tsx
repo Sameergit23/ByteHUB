@@ -1,9 +1,7 @@
 import type { Metadata } from "next";
 import { Space_Grotesk, Inter } from "next/font/google";
 import "./globals.css";
-import { Header } from "../components/layout/Header";
-import { Footer } from "../components/layout/Footer";
-import { SiteChrome } from "../components/layout/SiteChrome";
+import { ApiWarmup } from "../components/layout/ApiWarmup";
 import { siteConfig } from "../lib/siteConfig";
 
 const spaceGrotesk = Space_Grotesk({
@@ -47,9 +45,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           Skip to main content
         </a>
 
-        <SiteChrome header={<Header />} footer={<Footer />}>
-          {children}
-        </SiteChrome>
+        {/* Public pages get the site header and footer from app/(site)/layout.tsx; the admin
+            panel brings its own frame. */}
+        <ApiWarmup />
+        {children}
       </body>
     </html>
   );

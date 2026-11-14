@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { InternshipController } from "../controllers/internship.controller.js";
 import { validateRequest } from "../validators/validate.middleware.js";
-import { authenticateJWT, requireRoles } from "../middleware/auth.js";
+import { authenticateJWT } from "../middleware/auth.js";
+import { requirePermission, requireStaff } from "../middleware/staff.js";
 import {
   CreateInternshipSchema,
   UpdateInternshipSchema,
@@ -21,7 +22,8 @@ internshipsRouter.get(
 internshipsRouter.get(
   "/mine",
   authenticateJWT,
-  requireRoles("COMPANY", "ADMIN"),
+  requireStaff(),
+  requirePermission("internships.manage"),
   InternshipController.listMine
 );
 
@@ -32,7 +34,8 @@ internshipsRouter.get("/:slug", InternshipController.getBySlug);
 internshipsRouter.post(
   "/",
   authenticateJWT,
-  requireRoles("ADMIN"),
+  requireStaff(),
+  requirePermission("internships.manage"),
   validateRequest({ body: CreateInternshipSchema }),
   InternshipController.create
 );
@@ -41,7 +44,8 @@ internshipsRouter.post(
 internshipsRouter.patch(
   "/:id",
   authenticateJWT,
-  requireRoles("ADMIN"),
+  requireStaff(),
+  requirePermission("internships.manage"),
   validateRequest({ body: UpdateInternshipSchema }),
   InternshipController.update
 );
@@ -50,6 +54,7 @@ internshipsRouter.patch(
 internshipsRouter.patch(
   "/:id/approve",
   authenticateJWT,
-  requireRoles("ADMIN"),
+  requireStaff(),
+  requirePermission("internships.manage"),
   InternshipController.approve
 );

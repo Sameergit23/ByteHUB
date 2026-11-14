@@ -82,7 +82,7 @@ export function Navbar() {
               <Link
                 href={
                   user.role === "ADMIN"
-                    ? "/admin"
+                    ? "/dashboard"
                     : user.role === "COMPANY"
                       ? "/dashboard/company"
                       : "/dashboard/student"
@@ -149,7 +149,7 @@ export function Navbar() {
                 <Link
                   href={
                     user.role === "ADMIN"
-                      ? "/admin"
+                      ? "/dashboard"
                       : user.role === "COMPANY"
                         ? "/dashboard/company"
                         : "/dashboard/student"
