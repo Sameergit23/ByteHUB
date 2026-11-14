@@ -87,20 +87,37 @@ export interface TrainingProgramItem {
 
 type FetchResult<T> = { ok: true; data: T } | { ok: false; notFound: boolean };
 
+// The API sleeps on Render's free plan and takes about 50 seconds to wake. While it wakes,
+// requests fail or get 502/503/504, so those are retried for a while before giving up.
+const WAKE_RETRY_DELAYS_MS = [2000, 4000, 8000];
+
 async function apiGet<T>(path: string): Promise<FetchResult<T>> {
-  try {
-    const res = await fetch(`${SERVER_API_BASE}${path}`, {
-      next: { revalidate: REVALIDATE_SECONDS },
-      headers: { Accept: "application/json" },
-    });
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const res = await fetch(
+        `${SERVER_API_BASE}${path}`,
+        attempt === 0
+          ? {
+              next: { revalidate: REVALIDATE_SECONDS },
+              headers: { Accept: "application/json" },
+            }
+          : // Retries skip the cache so a saved failure is never served again.
+            { cache: "no-store", headers: { Accept: "application/json" } }
+      );
 
-    if (res.status === 404) return { ok: false, notFound: true };
-    if (!res.ok) return { ok: false, notFound: false };
+      if (res.status === 404) return { ok: false, notFound: true };
+      if (res.ok) {
+        const body = await res.json();
+        return { ok: true, data: body.data as T };
+      }
+      if (![502, 503, 504].includes(res.status)) return { ok: false, notFound: false };
+    } catch {
+      // Network error: the API is asleep or restarting. Retry below.
+    }
 
-    const body = await res.json();
-    return { ok: true, data: body.data as T };
-  } catch {
-    return { ok: false, notFound: false };
+    const delay = WAKE_RETRY_DELAYS_MS[attempt];
+    if (delay === undefined) return { ok: false, notFound: false };
+    await new Promise((resolve) => setTimeout(resolve, delay));
   }
 }
 

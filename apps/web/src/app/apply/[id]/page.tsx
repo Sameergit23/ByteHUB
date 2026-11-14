@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getInternship } from "../../../lib/catalog";
+import { CatalogUnavailableError, getInternship } from "../../../lib/catalog";
+import { CatalogWaking } from "../../../components/ui/CatalogWaking";
 import { ApplyForm } from "./ApplyForm";
 
 export const metadata: Metadata = {
@@ -13,7 +14,21 @@ export default async function ApplicationFormPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const internship = await getInternship((await params).id);
+  let internship;
+  try {
+    internship = await getInternship((await params).id);
+  } catch (err) {
+    if (err instanceof CatalogUnavailableError) {
+      return (
+        <CatalogWaking
+          what="application form"
+          backHref="/internships"
+          backLabel="All internships"
+        />
+      );
+    }
+    throw err;
+  }
 
   if (!internship) {
     return notFound();

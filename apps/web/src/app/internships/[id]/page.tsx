@@ -6,7 +6,8 @@ import { Button } from "../../../components/ui/Button";
 import { Card, CardTitle } from "../../../components/ui/Card";
 import { ColophonFooter } from "../../../components/layout/ColophonFooter";
 import { JobPostingJsonLd } from "../../../components/seo/JobPostingJsonLd";
-import { getInternship } from "../../../lib/catalog";
+import { CatalogUnavailableError, getInternship } from "../../../lib/catalog";
+import { CatalogWaking } from "../../../components/ui/CatalogWaking";
 import { siteConfig } from "../../../lib/siteConfig";
 
 export async function generateMetadata({
@@ -14,7 +15,13 @@ export async function generateMetadata({
 }: {
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
-  const internship = await getInternship((await params).id).catch(() => null);
+  let internship;
+  try {
+    internship = await getInternship((await params).id);
+  } catch {
+    // Server asleep or restarting: a neutral title, not "not found".
+    return { title: "Internship — ByteHUB" };
+  }
 
   if (!internship) {
     return { title: "Internship Not Found — ByteHUB" };
@@ -38,7 +45,21 @@ export default async function InternshipDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const internship = await getInternship((await params).id);
+  let internship;
+  try {
+    internship = await getInternship((await params).id);
+  } catch (err) {
+    if (err instanceof CatalogUnavailableError) {
+      return (
+        <CatalogWaking
+          what="internship"
+          backHref="/internships"
+          backLabel="All internships"
+        />
+      );
+    }
+    throw err;
+  }
 
   if (!internship) {
     return notFound();

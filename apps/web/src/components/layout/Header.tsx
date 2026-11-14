@@ -244,13 +244,6 @@ export const Header: React.FC = () => {
                   {link.label}
                 </Link>
               ))}
-              <Link
-                href="/styleguide"
-                onClick={() => setDrawerOpen(false)}
-                className="text-lg font-mono text-editorial-muted hover:text-ink pt-2 min-h-[44px] flex items-center focus-visible:outline-2 focus-visible:outline-ink"
-              >
-                // Component Styleguide
-              </Link>
             </nav>
 
             {/* Bottom Actions */}

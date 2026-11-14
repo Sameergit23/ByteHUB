@@ -95,14 +95,6 @@ export const Footer: React.FC = () => {
                   Student dashboard
                 </Link>
               </li>
-              <li>
-                <Link
-                  href="/styleguide"
-                  className="text-ink hover:text-accent transition-colors min-h-[44px] inline-flex items-center font-mono text-xs"
-                >
-                  Component Styleguide
-                </Link>
-              </li>
             </ul>
           </div>
 

@@ -6,7 +6,8 @@ import { Button } from "../../../components/ui/Button";
 import { Card, CardTitle } from "../../../components/ui/Card";
 import { ColophonFooter } from "../../../components/layout/ColophonFooter";
 import { CourseJsonLd } from "../../../components/seo/CourseJsonLd";
-import { getProgramme } from "../../../lib/catalog";
+import { CatalogUnavailableError, getProgramme } from "../../../lib/catalog";
+import { CatalogWaking } from "../../../components/ui/CatalogWaking";
 import { siteConfig } from "../../../lib/siteConfig";
 
 export async function generateMetadata({
@@ -14,7 +15,13 @@ export async function generateMetadata({
 }: {
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
-  const program = await getProgramme((await params).id).catch(() => null);
+  let program;
+  try {
+    program = await getProgramme((await params).id);
+  } catch {
+    // Server asleep or restarting: a neutral title, not "not found".
+    return { title: "Training programme — ByteHUB" };
+  }
 
   if (!program) {
     return { title: "Programme Not Found — ByteHUB" };
@@ -38,7 +45,17 @@ export default async function TrainingDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const program = await getProgramme((await params).id);
+  let program;
+  try {
+    program = await getProgramme((await params).id);
+  } catch (err) {
+    if (err instanceof CatalogUnavailableError) {
+      return (
+        <CatalogWaking what="programme" backHref="/training" backLabel="All programmes" />
+      );
+    }
+    throw err;
+  }
 
   if (!program) {
     return notFound();
